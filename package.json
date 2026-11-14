@@ -1,0 +1,14 @@
+{
+  "name": "glassly-bulut-cloudflare",
+  "version": "0.3.0",
+  "private": true,
+  "description": "Glassly Bulut: hesaplar + OpenAI uyumlu model havuzu (Cloudflare Workers)",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy"
+  },
+  "devDependencies": {
+    "wrangler": "^4.50.0"
+  },
+  "license": "MIT"
+}

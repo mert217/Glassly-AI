@@ -1,0 +1,280 @@
+{
+  "port": 8787,
+  "accessKeys": [],
+  "rateLimitPerMinute": 30,
+  "maxTries": 14,
+  "fallback": true,
+  "upstreams": [
+    {
+      "name": "cloudflare",
+      "type": "workers-ai",
+      "models": [
+        "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+        "@cf/openai/gpt-oss-120b",
+        "@cf/meta/llama-4-scout-17b-16e-instruct",
+        "@cf/mistralai/mistral-small-3.1-24b-instruct",
+        "@cf/qwen/qwen2.5-coder-32b-instruct",
+        "@cf/deepseek-ai/deepseek-r1-distill-qwen-32b",
+        "@cf/google/gemma-3-12b-it",
+        "@cf/openai/gpt-oss-20b",
+        "@cf/meta/llama-3.1-8b-instruct"
+      ],
+      "tier": 2
+    },
+    {
+      "name": "cloudflare-lite",
+      "type": "workers-ai",
+      "tier": 3,
+      "models": [
+        "@cf/meta/llama-3.1-8b-instruct-fast",
+        "@cf/meta/llama-3.2-3b-instruct",
+        "@cf/ibm-granite/granite-4.0-h-micro",
+        "@cf/meta/llama-3.2-1b-instruct"
+      ]
+    },
+    {
+      "name": "ovh",
+      "baseURL": "https://oai.endpoints.kepler.ai.cloud.ovh.net/v1",
+      "keyless": true,
+      "discover": true,
+      "limit": 14,
+      "prefer": [
+        "llama-3",
+        "gpt-oss",
+        "qwen",
+        "mistral"
+      ],
+      "tier": 2
+    },
+    {
+      "name": "kilo",
+      "baseURL": "https://api.kilo.ai/api/gateway",
+      "keyless": true,
+      "discover": true,
+      "free": true,
+      "limit": 14,
+      "tier": 2
+    },
+    {
+      "name": "llm7",
+      "baseURL": "https://api.llm7.io/v1",
+      "keys": [
+        "unused"
+      ],
+      "discover": true,
+      "limit": 8,
+      "prefer": [
+        "gpt-oss",
+        "llama",
+        "glm"
+      ],
+      "models": [
+        "gpt-4.1-nano-2025-04-14"
+      ],
+      "tier": 3
+    },
+    {
+      "name": "pollinations",
+      "baseURL": "https://text.pollinations.ai/openai",
+      "keyless": true,
+      "models": [
+        "openai-fast"
+      ],
+      "tier": 3
+    },
+    {
+      "name": "groq",
+      "baseURL": "https://api.groq.com/openai/v1",
+      "keys": [
+        "$GROQ_KEY"
+      ],
+      "discover": true,
+      "limit": 8,
+      "prefer": [
+        "llama-3.3",
+        "gpt-oss",
+        "qwen",
+        "llama-4",
+        "llama-3.1"
+      ],
+      "models": [
+        "llama-3.3-70b-versatile"
+      ],
+      "tier": 1
+    },
+    {
+      "name": "gemini",
+      "baseURL": "https://generativelanguage.googleapis.com/v1beta/openai",
+      "keys": [
+        "$GEMINI_KEY_1",
+        "$GEMINI_KEY_2"
+      ],
+      "discover": true,
+      "limit": 5,
+      "prefer": [
+        "2.5-flash",
+        "flash-lite",
+        "flash"
+      ],
+      "models": [
+        "gemini-2.5-flash"
+      ],
+      "tier": 1
+    },
+    {
+      "name": "openrouter",
+      "baseURL": "https://openrouter.ai/api/v1",
+      "keys": [
+        "$OPENROUTER_KEY"
+      ],
+      "discover": true,
+      "free": true,
+      "limit": 14,
+      "prefer": [
+        "deepseek",
+        "llama-3.3",
+        "qwen",
+        "gpt-oss",
+        "gemma"
+      ],
+      "tier": 1
+    },
+    {
+      "name": "cerebras",
+      "baseURL": "https://api.cerebras.ai/v1",
+      "keys": [
+        "$CEREBRAS_KEY"
+      ],
+      "discover": true,
+      "limit": 5,
+      "prefer": [
+        "llama",
+        "gpt-oss",
+        "qwen"
+      ],
+      "models": [
+        "llama-3.3-70b"
+      ],
+      "tier": 1
+    },
+    {
+      "name": "mistral",
+      "baseURL": "https://api.mistral.ai/v1",
+      "keys": [
+        "$MISTRAL_KEY"
+      ],
+      "discover": true,
+      "limit": 8,
+      "prefer": [
+        "mistral-small",
+        "mistral-medium",
+        "open-mistral",
+        "codestral"
+      ],
+      "tier": 1
+    },
+    {
+      "name": "nvidia",
+      "baseURL": "https://integrate.api.nvidia.com/v1",
+      "keys": [
+        "$NVIDIA_KEY"
+      ],
+      "discover": true,
+      "limit": 12,
+      "prefer": [
+        "deepseek",
+        "llama-3.3",
+        "qwen",
+        "gpt-oss",
+        "nemotron"
+      ],
+      "tier": 1
+    },
+    {
+      "name": "huggingface",
+      "baseURL": "https://router.huggingface.co/v1",
+      "keys": [
+        "$HF_TOKEN"
+      ],
+      "discover": true,
+      "limit": 8,
+      "prefer": [
+        "deepseek",
+        "qwen",
+        "llama-3.3",
+        "gpt-oss",
+        "kimi"
+      ],
+      "tier": 1
+    },
+    {
+      "name": "ollama",
+      "baseURL": "https://ollama.com/v1",
+      "keys": [
+        "$OLLAMA_KEY"
+      ],
+      "discover": true,
+      "limit": 8,
+      "prefer": [
+        "gpt-oss",
+        "qwen",
+        "deepseek",
+        "glm",
+        "kimi"
+      ],
+      "tier": 1
+    },
+    {
+      "name": "sambanova",
+      "baseURL": "https://api.sambanova.ai/v1",
+      "keys": [
+        "$SAMBANOVA_KEY"
+      ],
+      "discover": true,
+      "limit": 6,
+      "prefer": [
+        "llama",
+        "deepseek",
+        "qwen",
+        "gpt-oss"
+      ],
+      "tier": 1
+    },
+    {
+      "name": "zai",
+      "baseURL": "https://api.z.ai/api/paas/v4",
+      "keys": [
+        "$ZAI_KEY"
+      ],
+      "models": [
+        "glm-4.5-flash"
+      ],
+      "tier": 1
+    },
+    {
+      "name": "cohere",
+      "baseURL": "https://api.cohere.ai/compatibility/v1",
+      "keys": [
+        "$COHERE_KEY"
+      ],
+      "models": [
+        "command-a-03-2025"
+      ],
+      "tier": 1
+    },
+    {
+      "name": "deepseek",
+      "baseURL": "https://api.deepseek.com/v1",
+      "keys": [
+        "$DEEPSEEK_KEY"
+      ],
+      "models": [
+        "deepseek-chat"
+      ],
+      "tier": 1
+    }
+  ],
+  "timeoutStreamMs": 9000,
+  "timeoutPlainMs": 20000,
+  "budgetMs": 45000
+}

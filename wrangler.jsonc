@@ -1,0 +1,12 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "glassly-bulut",
+  "main": "src/index.js",
+  "compatibility_date": "2025-09-01",
+  "observability": { "enabled": true },
+  // Hesaplar ve oturumlar burada saklanır. "id" yazmana gerek yok:
+  // ilk yayınlamada Cloudflare "DB" adlı KV alanını kendisi oluşturur.
+  "kv_namespaces": [{ "binding": "DB" }],
+  // Cloudflare'in ücretsiz Workers AI'ı: anahtar gerekmez, günlük ücretsiz kota vardır
+  "ai": { "binding": "AI" }
+}

@@ -54,13 +54,30 @@ export async function plan(S, ctxMsgs, TZ) {
 export async function webSearch(query, n = 6) {
   const errs = [];
   try { const a = await exaSearch(query, n); if (a.length) return a; errs.push('exa: boş'); } catch (e) { errs.push('exa: ' + e.message); }
+  try { const c = await bingSearch(query, n); if (c.length) return c; errs.push('bing: boş'); } catch (e) { errs.push('bing: ' + e.message); }
   try { const b = await ddgSearch(query, n); if (b.length) return b; errs.push('ddg: boş'); } catch (e) { errs.push('ddg: ' + e.message); }
   throw new Error(errs.join(' | '));
 }
 const decode = (s) => s.replace(/<[^>]+>/g, '').replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#x27;|&#39;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim();
+async function bingSearch(query, n) {
+  const r = await fetch('https://www.bing.com/search?format=rss&setlang=tr&cc=TR&q=' + encodeURIComponent(query), {
+    signal: AbortSignal.timeout(8000), headers: { 'user-agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130 Safari/537.36', 'accept-language': 'tr-TR,tr;q=0.9' },
+  });
+  if (!r.ok) throw new Error('HTTP ' + r.status);
+  const xml = await r.text();
+  const items = [];
+  for (const it of xml.split('<item>').slice(1)) {
+    const g = (t) => decode((it.match(new RegExp('<' + t + '>([\\s\\S]*?)</' + t + '>')) || [])[1] || '');
+    const url = g('link'); const title = g('title');
+    if (!/^https?:/.test(url) || !title) continue;
+    items.push({ title: title.slice(0, 200), url, date: '', text: g('description').slice(0, 1800) });
+    if (items.length >= n) break;
+  }
+  return items;
+}
 async function ddgSearch(query, n) {
   const r = await fetch('https://html.duckduckgo.com/html/', {
-    method: 'POST', signal: AbortSignal.timeout(12000),
+    method: 'POST', signal: AbortSignal.timeout(7000),
     headers: { 'content-type': 'application/x-www-form-urlencoded', 'user-agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130 Safari/537.36', 'accept-language': 'tr-TR,tr;q=0.9' },
     body: 'q=' + encodeURIComponent(query) + '&kl=tr-tr',
   });
@@ -81,7 +98,7 @@ async function ddgSearch(query, n) {
 async function exaSearch(query, n) {
   const r = await fetch('https://mcp.exa.ai/mcp', {
     method: 'POST', signal: AbortSignal.timeout(15000),
-    headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream' },
+    headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream', 'user-agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130 Safari/537.36' },
     body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'web_search_exa', arguments: { query, numResults: n } } }),
   });
   if (!r.ok) throw new Error('HTTP ' + r.status);

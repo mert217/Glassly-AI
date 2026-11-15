@@ -60,6 +60,7 @@ engine.extraConfig = () => ({ mcp: connections.mcpConfig() });
 const accounts = new Accounts({ store, dataDir: app.getPath('userData'), engine, connections });
 engine.accountKey = () => (accounts.current()?.mode === 'bulut' ? accounts.token() : '');
 engine.userName = () => accounts.current()?.name || '';
+engine.isCreator = () => { const u = accounts.current(); return !!u && (u.role === 'gelistirici' || String(u.email || '').toLowerCase() === 'ahmetmertevci@gmail.com'); };
 connections.scope = () => accounts.current()?.id || null;
 assistant.scope = () => accounts.current()?.id || null;
 

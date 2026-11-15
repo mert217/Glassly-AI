@@ -375,12 +375,9 @@ function partHTML(part, streaming) {
     return `<div class="prose ${streaming ? 'caret' : ''}" data-part="${part.id}">${window.Markdown.render(part.text)}</div>`;
   }
   if (part.type === 'reasoning') {
-    if (!part.text?.trim()) return '';
-    const done = part.time?.end;
-    const secs = done ? Math.max(1, Math.round((part.time.end - part.time.start) / 1000)) : 0;
-    return `<details class="reasoning" data-part="${part.id}" ${part._open ? 'open' : ''}>
-      <summary>${icon('brain', 15)}<span>${done ? `${secs} sn düşündü` : 'Düşünüyor…'}</span>${icon('right', 14)}</summary>
-      <div class="prose">${window.Markdown.render(part.text)}</div></details>`;
+    // Düşünme metni gösterilmez; yalnızca sürerken kısa bir gösterge çıkar
+    if (part.time?.end || !streaming) return '';
+    return `<div class="reasoning thinking-now" data-part="${part.id}">${icon('brain', 15)}<span>Düşünüyor…</span></div>`;
   }
   if (part.type === 'tool') return toolHTML(part);
   if (part.type === 'file') return `<span class="chip" data-part="${part.id}">${icon('file', 12)}${esc(part.filename || 'dosya')}</span>`;
@@ -422,7 +419,7 @@ function messageModel(m, prevRole, nextRole) {
   const lastText = [...visible].reverse().find((p) => p.type === 'text');
   const children = [];
   for (const p of visible) {
-    const h = partHTML(p, streaming && p === lastText && p === visible.at(-1));
+    const h = partHTML(p, p.type === 'reasoning' ? streaming && p === visible.at(-1) : streaming && p === lastText && p === visible.at(-1));
     if (h) children.push({ key: p.id, html: h });
   }
   const err = errorText(info.error);

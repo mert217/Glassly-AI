@@ -284,6 +284,8 @@ button { cursor: pointer; background: none; border: 0; padding: 0; }
 .reasoning summary { list-style: none; display: flex; gap: 8px; align-items: center; padding: 6px 12px; cursor: pointer; color: var(--muted); font-size: var(--text-sm); }
 .reasoning summary::-webkit-details-marker { display: none; }
 .reasoning[open] summary .ic:last-child { transform: rotate(90deg); }
+.thinking-now { display: inline-flex; gap: 8px; align-items: center; padding: 6px 12px; color: var(--muted); font-size: var(--text-sm); border-style: none; animation: thinkPulse 1.4s ease-in-out infinite; }
+@keyframes thinkPulse { 50% { opacity: .45; } }
 .reasoning .prose { padding: 0 14px 10px; color: var(--text-2); font-size: var(--text-sm); }
 
 /* Araç kartları */

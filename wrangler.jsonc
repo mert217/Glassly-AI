@@ -17,11 +17,8 @@
   "d1_databases": [{ "binding": "DB", "database_name": "glassly-db" }],
   // Cloudflare'in ücretsiz Workers AI'ı: anahtar gerekmez, günlük ücretsiz kota vardır
   "ai": { "binding": "AI" },
-  // glassly.biz alan adı Cloudflare hesabında olduğu için otomatik bağlanır
-  "routes": [
-    { "pattern": "glassly.biz", "custom_domain": true },
-    { "pattern": "www.glassly.biz", "custom_domain": true }
-  ],
+  // glassly.biz alan adı panelden bağlanır: Settings → Domains & Routes → Add → Custom domain
+  "workers_dev": true,
   "vars": {
     "GLASSLY_DAILY_LIMIT": "70",
     "GLASSLY_TIMEZONE": "Europe/Istanbul",

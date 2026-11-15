@@ -21,7 +21,7 @@ Masaüstü uygulamasının kaynak kodu `desktop/` klasöründedir. Yeni bir sür
    - Name: `GLASSLY_DEVELOPER`
    - Value: `e-posta|şifre-özeti` (şifre özeti `node scripts/sifre-ozeti.mjs 'ŞİFREN'` ile üretilir)
    - **Deploy**'a bas.
-3. `glassly.biz` alan adı aynı Cloudflare hesabında olduğu için `wrangler.jsonc` içindeki `routes` ile kendiliğinden bağlanır. Olmazsa: Worker → **Settings** → **Domains & Routes** → **Add** → **Custom domain** → `glassly.biz`.
+3. Alan adı: Worker → **Settings** → **Domains & Routes** → **Add** → **Custom domain** → `glassly.biz` (aynısını `www.glassly.biz` için de yap). Alan adında eski DNS kaydı varsa önce **DNS → Records** bölümünden sil.
 4. Kontrol: `https://glassly.biz/health` → `{"ok":true,...}`
 
 Bundan sonra GitHub'a her gönderimde Cloudflare siteyi kendiliğinden yeniden yayınlar.

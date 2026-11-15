@@ -1,220 +1,239 @@
-// Glassly hesapları: e-posta + şifre ile kayıt/giriş, oturumlar ve misafir mesaj hakkı.
-// Şifreler PBKDF2-SHA256 ile tuzlanıp saklanır (Workers'ta scrypt yok), oturum belirteçlerinin sadece özeti tutulur.
+// Glassly hesapları: kayıt/giriş (e-posta + şifre ya da Google), oturumlar, günlük mesaj hakkı
+// ve geliştirici paneli. Uç noktalar Glassly masaüstü uygulamasıyla birebir uyumludur.
+// Şifreler PBKDF2-SHA256 ile tuzlanıp özetlenir; oturum belirteçlerinin yalnızca SHA-256 özeti saklanır.
 
-const EMAIL_RE = /^[^\s@]{1,64}@[^\s@]{1,190}\.[^\s@]{2,}$/;
-const DEVICE_RE = /^[A-Za-z0-9-]{16,64}$/;
 const enc = new TextEncoder();
-
+const EMAIL_RE = /^[^\s@]{1,64}@[^\s@]{1,190}\.[^\s@]{2,}$/;
+const b64 = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf)));
+const unb64 = (s) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
+const b64url = (buf) => b64(buf).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 const hex = (buf) => [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, '0')).join('');
-const b64url = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-const randomHex = (n) => hex(crypto.getRandomValues(new Uint8Array(n)));
 const sha = async (s) => hex(await crypto.subtle.digest('SHA-256', enc.encode(s)));
-const today = () => new Date().toISOString().slice(0, 10);
-const publicUser = (u) => ({ id: u.id, email: u.email, name: u.name, created: u.created });
+const normEmail = (e) => String(e || '').trim().toLowerCase();
+const cleanName = (n) => String(n || '').replace(/\s+/g, ' ').trim().slice(0, 60);
+const ITER = 100000; // Workers'ta PBKDF2 için üst sınır
+let NEW_ITER = ITER; // yeni şifreler için (GLASSLY_PBKDF2_ITER ile düşürülebilir)
 
-function safeEqual(a, b) {
-  if (a.length !== b.length) return false;
-  let d = 0;
-  for (let i = 0; i < a.length; i++) d |= a.charCodeAt(i) ^ b.charCodeAt(i);
+export async function hashPassword(password, salt = crypto.getRandomValues(new Uint8Array(16)), iter = NEW_ITER) {
+  const key = await crypto.subtle.importKey('raw', enc.encode(String(password).normalize('NFKC')), 'PBKDF2', false, ['deriveBits']);
+  const bits = await crypto.subtle.deriveBits({ name: 'PBKDF2', hash: 'SHA-256', salt, iterations: iter }, key, 256);
+  return `pbkdf2$${iter}$${b64(salt)}$${b64(bits)}`;
+}
+async function checkPassword(password, stored) {
+  const [kind, iter, salt, want] = String(stored || '').split('$');
+  if (kind !== 'pbkdf2' || !salt || !want) return false;
+  const got = (await hashPassword(password || '', unb64(salt), Math.min(ITER, Number(iter) || ITER))).split('$')[3];
+  if (got.length !== want.length) return false;
+  let d = 0; for (let i = 0; i < got.length; i++) d |= got.charCodeAt(i) ^ want.charCodeAt(i);
   return d === 0;
 }
 
-// Bellekte kısa süreli deneme sayaçları (her Worker kopyasında ayrı; kaba kuvvete karşı ek katman)
 class Window {
   constructor(ms, max) { this.ms = ms; this.max = max; this.m = new Map(); }
-  recent(k) { const now = Date.now(); return (this.m.get(k) || []).filter((t) => now - t < this.ms); }
   hit(k) {
-    const a = this.recent(k); a.push(Date.now()); this.m.set(k, a);
-    if (this.m.size > 5000) for (const [key] of this.m) if (!this.recent(key).length) this.m.delete(key);
-    return a.length;
+    const now = Date.now(); const a = (this.m.get(k) || []).filter((t) => now - t < this.ms); a.push(now); this.m.set(k, a);
+    if (this.m.size > 5000) for (const [key, v] of this.m) if (!v.some((t) => now - t < this.ms)) this.m.delete(key);
+    return a.length > this.max;
   }
-  over(k) { return this.recent(k).length >= this.max; }
-  clear(k) { this.m.delete(k); }
 }
 
-export function createAuth(db, env) {
-  // Hesapsız (misafir) toplam hak: varsayılan 1 mesaj, sonra kayıt/giriş gerekir.
-  const GUEST_LIMIT = Number(env.GLASSLY_GUEST_LIMIT ?? 1);
-  const GUEST_IP_DAILY = Number(env.GLASSLY_GUEST_IP_DAILY || 40);
-  // Hesap açanların günlük mesaj kotası (gece UTC 00:00'da sıfırlanır). 0 = sınırsız.
-  const DAILY_LIMIT = Number(env.GLASSLY_DAILY_LIMIT ?? 50);
+const authHits = new Window(60e3, 15);
+let seeded = '';
+
+export function createAccounts(db, env) {
+  // GLASSLY_DEVELOPER (gizli değişken): "eposta|pbkdf2$...". Bu hesap geliştiricidir, silinemez, sınırsızdır.
+  const [devEmail, devHash] = String(env.GLASSLY_DEVELOPER || '').split('|').map((s) => s.trim());
+  const ADMINS = new Set([devEmail, ...String(env.GLASSLY_ADMINS || '').split(',')].map(normEmail).filter(Boolean));
+  const isAdmin = (u) => !!u && ADMINS.has(u.email);
+  const DAILY = Number(env.GLASSLY_DAILY_LIMIT ?? 70);
+  const TZ = env.GLASSLY_TIMEZONE || 'Europe/Istanbul';
   const SESSION_DAYS = Number(env.GLASSLY_SESSION_DAYS || 90);
-  const ITER = Math.min(100000, Number(env.GLASSLY_PBKDF2_ITER || 100000)); // Workers üst sınırı 100000
+  const GOOGLE_IDS = new Set(String(env.GLASSLY_GOOGLE_CLIENT_IDS || '').split(',').map((s) => s.trim()).filter(Boolean));
+  NEW_ITER = Math.max(10000, Math.min(ITER, Number(env.GLASSLY_PBKDF2_ITER) || ITER));
 
-  const loginFails = new Window(15 * 60e3, 8);
-  const ipFails = new Window(15 * 60e3, 30);
-  const registers = new Window(60 * 60e3, 5);
-
-  async function hashPassword(password, salt = randomHex(16), iter = ITER) {
-    const key = await crypto.subtle.importKey('raw', enc.encode(password.normalize('NFKC')), 'PBKDF2', false, ['deriveBits']);
-    const bits = await crypto.subtle.deriveBits({ name: 'PBKDF2', hash: 'SHA-256', salt: enc.encode(salt), iterations: iter }, key, 512);
-    return { salt, hash: hex(bits), iter };
+  const today = () => new Intl.DateTimeFormat('sv-SE', { timeZone: TZ }).format(new Date());
+  function resetAt() {
+    const now = new Date();
+    const local = new Date(now.toLocaleString('en-US', { timeZone: TZ }));
+    const mid = new Date(local); mid.setHours(24, 0, 0, 0);
+    return now.getTime() + (mid - local);
   }
-  async function checkPassword(password, user) {
-    const { hash } = await hashPassword(password, user.salt, user.iter || ITER);
-    return safeEqual(hash, user.hash);
-  }
+  const publicUser = (u) => ({ id: u.id, name: u.name, email: u.email, provider: u.provider, created: u.created, role: isAdmin(u) ? 'gelistirici' : 'kullanici' });
 
-  async function newSession(user) {
-    const token = 'gls_' + b64url(crypto.getRandomValues(new Uint8Array(32)));
-    const h = await sha(token);
-    const now = Date.now();
-    await db.put('sessions', h, { email: user.email, created: now, seen: now, exp: now + SESSION_DAYS * 864e5 }, SESSION_DAYS * 86400);
-    user.sessions = [...(user.sessions || []).slice(-19), h];
-    await db.put('users', user.email, user);
-    return token;
+  async function seed() {
+    if (seeded === devHash || !devEmail || !devHash) return;
+    const u = await db.one('SELECT * FROM users WHERE email = ?', normEmail(devEmail));
+    if (!u) await db.run('INSERT INTO users (id, email, name, hash, provider, created, dev_seed) VALUES (?, ?, ?, ?, ?, ?, ?)', crypto.randomUUID(), normEmail(devEmail), 'Ahmet', devHash, 'sifre', Date.now(), devHash);
+    else if (u.dev_seed !== devHash) await db.run('UPDATE users SET hash = ?, dev_seed = ?, provider = ? WHERE id = ?', devHash, devHash, u.provider === 'google' ? 'sifre+google' : u.provider, u.id);
+    seeded = devHash;
   }
 
-  // Bearer belirtecinden kimlik: { kind: 'user', user } | { kind: 'guest', deviceId, guest } | null
-  async function identify(token) {
-    if (!token) return null;
-    if (token.startsWith('gls_')) {
-      const h = await sha(token);
-      const s = await db.get('sessions', h);
-      if (!s || s.exp < Date.now()) { if (s) await db.del('sessions', h); return null; }
-      const user = await db.get('users', s.email);
-      if (!user) { await db.del('sessions', h); return null; }
-      if (Date.now() - s.seen > 864e5) {
-        s.seen = Date.now(); s.exp = Date.now() + SESSION_DAYS * 864e5;
-        await db.put('sessions', h, s, SESSION_DAYS * 86400);
+  async function newSession(u) {
+    const token = 'gly_' + b64url(crypto.getRandomValues(new Uint8Array(32)));
+    await db.run('INSERT INTO sessions (h, uid, exp) VALUES (?, ?, ?)', await sha(token), u.id, Date.now() + SESSION_DAYS * 864e5);
+    return { token, user: publicUser(u) };
+  }
+  const bearer = (request) => (request.headers.get('authorization') || '').replace(/^Bearer\s+/i, '');
+  async function userOf(request) {
+    const tok = bearer(request);
+    if (!tok.startsWith('gly_')) return null;
+    await seed();
+    return db.one('SELECT u.* FROM sessions s JOIN users u ON u.id = s.uid WHERE s.h = ? AND s.exp > ?', await sha(tok), Date.now());
+  }
+
+  // ---- günlük mesaj hakkı
+  async function usedToday(u) { return (await db.one('SELECT n FROM usage WHERE uid = ? AND day = ?', u.id, today()))?.n || 0; }
+  async function usageOf(u, used) {
+    used ??= await usedToday(u);
+    return isAdmin(u) || !DAILY ? { used, limit: null, left: null, unlimited: true, reset: resetAt() } : { used, limit: DAILY, left: Math.max(0, DAILY - used), unlimited: false, reset: resetAt() };
+  }
+  // Hak varsa bir mesaj düşer ve güncel durum döner; yoksa null
+  async function consume(u) {
+    const q = await usageOf(u);
+    if (!q.unlimited && q.left <= 0) return null;
+    await db.batch([
+      ['INSERT INTO usage (uid, day, n) VALUES (?, ?, 1) ON CONFLICT(uid, day) DO UPDATE SET n = n + 1', u.id, today()],
+      ['UPDATE users SET requests = requests + 1, last_seen = ? WHERE id = ?', Date.now(), u.id],
+      ['DELETE FROM usage WHERE day < ?', new Date(Date.now() - 3 * 864e5).toISOString().slice(0, 10)],
+    ]);
+    return usageOf(u, q.used + 1);
+  }
+  async function refund(u) { await db.run('UPDATE usage SET n = MAX(0, n - 1) WHERE uid = ? AND day = ?', u.id, today()); }
+  const limitMsg = () => `Bugünkü ${DAILY} mesaj hakkın doldu. Gece yarısı yenilenir.`;
+  const registrationOpen = async () => (await db.setting('registration', String(env.GLASSLY_REGISTRATION ?? 'true') !== 'false')) !== false;
+
+  async function deleteUser(id) {
+    await db.batch([
+      ['DELETE FROM messages WHERE chat_id IN (SELECT id FROM chats WHERE uid = ?)', id],
+      ['DELETE FROM chats WHERE uid = ?', id],
+      ['DELETE FROM usage WHERE uid = ?', id],
+      ['DELETE FROM sessions WHERE uid = ?', id],
+      ['DELETE FROM users WHERE id = ?', id],
+    ]);
+  }
+
+  // ------------------------------------------------------------ /auth/...
+  async function auth(request, p, ip, { json, fail, readJSON }) {
+    const route = p.replace(/^\/(v1\/)?auth/, '');
+    const b = request.method === 'GET' ? {} : await readJSON(request);
+    await seed();
+    if ((['/register', '/login', '/google', '/password'].includes(route) || (route === '/me' && request.method === 'DELETE')) && authHits.hit(ip)) {
+      return fail(429, 'Çok fazla deneme yaptın. Bir dakika bekleyip tekrar dene.', 'rate_limit');
+    }
+    if (request.method === 'POST' && route === '/register') {
+      if (!(await registrationOpen())) return fail(403, 'Yeni kayıt şu an kapalı.', 'auth');
+      const email = normEmail(b.email); const name = cleanName(b.name);
+      if (!name) return fail(400, 'Adını yaz.');
+      if (!EMAIL_RE.test(email)) return fail(400, 'Geçerli bir e-posta adresi yaz.');
+      if (String(b.password || '').length < 8) return fail(400, 'Şifre en az 8 karakter olmalı.');
+      if (String(b.password).length > 200) return fail(400, 'Şifre çok uzun.');
+      if (await db.one('SELECT id FROM users WHERE email = ?', email)) return fail(409, 'Bu e-posta ile zaten bir hesap var. Giriş yapmayı dene.');
+      const u = { id: crypto.randomUUID(), name, email, hash: await hashPassword(b.password), provider: 'sifre', created: Date.now() };
+      await db.run('INSERT INTO users (id, email, name, hash, provider, created) VALUES (?, ?, ?, ?, ?, ?)', u.id, u.email, u.name, u.hash, u.provider, u.created);
+      return json(200, await newSession(u));
+    }
+    if (request.method === 'POST' && route === '/login') {
+      const u = await db.one('SELECT * FROM users WHERE email = ?', normEmail(b.email));
+      if (u && !u.hash) return fail(401, 'Bu hesap Google ile açılmış. "Google ile devam et"e bas.', 'auth');
+      if (!u || !(await checkPassword(b.password, u.hash))) return fail(401, 'E-posta veya şifre yanlış.', 'auth');
+      return json(200, await newSession(u));
+    }
+    if (request.method === 'POST' && route === '/google') {
+      let info;
+      try {
+        const r = await fetch('https://oauth2.googleapis.com/tokeninfo?id_token=' + encodeURIComponent(b.id_token || b.credential || ''), { signal: AbortSignal.timeout(10000) });
+        info = await r.json(); if (!r.ok) throw new Error('geçersiz');
+      } catch { return fail(401, 'Google girişi doğrulanamadı. Tekrar dene.', 'auth'); }
+      if (GOOGLE_IDS.size && !GOOGLE_IDS.has(info.aud)) return fail(401, 'Bu Google istemcisi bu sunucuda tanımlı değil.', 'auth');
+      if (String(info.email_verified) !== 'true' || !info.email) return fail(401, 'Google hesabının e-postası doğrulanmamış.', 'auth');
+      const email = normEmail(info.email);
+      let u = await db.one('SELECT * FROM users WHERE email = ?', email);
+      if (!u) {
+        if (!(await registrationOpen())) return fail(403, 'Yeni kayıt şu an kapalı.', 'auth');
+        u = { id: crypto.randomUUID(), name: cleanName(info.name) || email.split('@')[0], email, hash: '', provider: 'google', created: Date.now() };
+        await db.run('INSERT INTO users (id, email, name, hash, provider, created) VALUES (?, ?, ?, ?, ?, ?)', u.id, u.email, u.name, '', 'google', u.created);
+      } else if (!u.provider.includes('google')) {
+        u.provider = u.hash ? 'sifre+google' : 'google';
+        await db.run('UPDATE users SET provider = ? WHERE id = ?', u.provider, u.id);
       }
-      return { kind: 'user', user, sessionHash: h };
+      return json(200, await newSession(u));
     }
-    if (token.startsWith('guest_')) {
-      const deviceId = token.slice(6);
-      if (!DEVICE_RE.test(deviceId)) return null;
-      const guest = (await db.get('guests', deviceId)) || { used: 0, first: Date.now() };
-      return { kind: 'guest', deviceId, guest };
+    const me = await userOf(request);
+    if (!me) return fail(401, 'Oturumun sona ermiş. Tekrar giriş yap.', 'auth');
+    if (request.method === 'GET' && route === '/usage') return json(200, await usageOf(me));
+    if (request.method === 'POST' && route === '/usage') {
+      const q = await consume(me);
+      return q ? json(200, q) : fail(429, limitMsg(), 'daily_limit');
     }
-    return null;
-  }
-
-  const guestMayUseCloud = (id) => id?.kind === 'guest' && id.guest.used > 0 && id.guest.used <= GUEST_LIMIT;
-
-  async function guestStatus(deviceId) {
-    const g = (await db.get('guests', deviceId)) || { used: 0 };
-    return { limit: GUEST_LIMIT, used: Math.min(g.used, GUEST_LIMIT), remaining: Math.max(0, GUEST_LIMIT - g.used) };
-  }
-
-  async function guestUse(deviceId, ip) {
-    const g = (await db.get('guests', deviceId)) || { used: 0, first: Date.now() };
-    if (g.used >= GUEST_LIMIT) return { ok: false, reason: 'limit', limit: GUEST_LIMIT, used: GUEST_LIMIT, remaining: 0 };
-    const ipKey = `${ip}|${today()}`;
-    const ipRec = (await db.get('guest_ip', ipKey)) || { n: 0 };
-    if (GUEST_IP_DAILY && ipRec.n >= GUEST_IP_DAILY) return { ok: false, reason: 'ip', limit: GUEST_LIMIT, used: g.used, remaining: GUEST_LIMIT - g.used };
-    g.used++; g.last = Date.now();
-    ipRec.n++;
-    await db.put('guests', deviceId, g);
-    await db.put('guest_ip', ipKey, ipRec, 2 * 86400);
-    return { ok: true, limit: GUEST_LIMIT, used: g.used, remaining: GUEST_LIMIT - g.used };
-  }
-
-  // Hesaplı kullanıcının günlük mesaj kotası (KV'de "daily:<userId>|<tarih>" olarak tutulur, 2 gün sonra kendi silinir)
-  async function dailyStatus(userId) {
-    const d = (await db.get('daily', `${userId}|${today()}`)) || { n: 0 };
-    return { limit: DAILY_LIMIT, used: d.n, remaining: DAILY_LIMIT ? Math.max(0, DAILY_LIMIT - d.n) : null };
-  }
-  async function dailyUse(userId) {
-    if (!DAILY_LIMIT) return { ok: true, limit: 0, used: 0, remaining: null };
-    const key = `${userId}|${today()}`;
-    const d = (await db.get('daily', key)) || { n: 0 };
-    if (d.n >= DAILY_LIMIT) return { ok: false, limit: DAILY_LIMIT, used: d.n, remaining: 0 };
-    d.n++;
-    await db.put('daily', key, d, 2 * 86400);
-    return { ok: true, limit: DAILY_LIMIT, used: d.n, remaining: DAILY_LIMIT - d.n };
-  }
-
-  // ------------------------------------------------------------ /auth/... uç noktaları
-  // Yanıt (Response) döndürür; yol /auth/ ile başlamıyorsa null.
-  async function handle(request, p, ip, { json, fail, readJSON }) {
-    if (!p.startsWith('/auth/')) return null;
-    const route = p.slice(6);
-    const bearer = (request.headers.get('authorization') || '').replace(/^Bearer\s+/i, '');
-
-    if (request.method === 'POST' && route === 'register') {
-      const b = await readJSON(request);
-      const name = String(b.name || '').trim().replace(/\s+/g, ' ');
-      const email = String(b.email || '').trim().toLowerCase();
-      const password = String(b.password || '');
-      if (!name || name.length > 60) return fail(400, 'Adını yaz (en fazla 60 karakter).', 'invalid_name');
-      if (!EMAIL_RE.test(email)) return fail(400, 'Geçerli bir e-posta adresi yaz.', 'invalid_email');
-      if (password.length < 8) return fail(400, 'Şifre en az 8 karakter olmalı.', 'weak_password');
-      if (password.length > 200) return fail(400, 'Şifre çok uzun.', 'weak_password');
-      if (registers.over(ip)) return fail(429, 'Çok fazla kayıt denemesi. Biraz sonra tekrar dene.', 'rate_limit');
-      if (await db.get('users', email)) return fail(409, 'Bu e-posta ile zaten bir hesap var. Giriş yapmayı dene.', 'email_taken');
-      registers.hit(ip);
-      const { salt, hash, iter } = await hashPassword(password);
-      const user = { id: crypto.randomUUID(), email, name, salt, hash, iter, created: Date.now(), sessions: [] };
-      const token = await newSession(user);
-      return json(201, { token, user: publicUser(user) });
+    if (request.method === 'GET' && route === '/me') return json(200, { user: publicUser(me), usage: await usageOf(me) });
+    if (request.method === 'PATCH' && route === '/me') {
+      const name = cleanName(b.name); if (!name) return fail(400, 'Adını yaz.');
+      await db.run('UPDATE users SET name = ? WHERE id = ?', name, me.id);
+      return json(200, { user: publicUser({ ...me, name }) });
     }
-
-    if (request.method === 'POST' && route === 'login') {
-      const b = await readJSON(request);
-      const email = String(b.email || '').trim().toLowerCase();
-      const password = String(b.password || '');
-      const k = `${ip}|${email}`;
-      if (loginFails.over(k) || ipFails.over(ip)) return fail(429, 'Çok fazla hatalı deneme. 15 dakika sonra tekrar dene.', 'rate_limit');
-      const user = email ? await db.get('users', email) : null;
-      const ok = user ? await checkPassword(password, user) : (await hashPassword(password || 'x'), false);
-      if (!ok) { loginFails.hit(k); ipFails.hit(ip); return fail(401, 'E-posta veya şifre hatalı.', 'bad_credentials'); }
-      loginFails.clear(k);
-      const token = await newSession(user);
-      return json(200, { token, user: publicUser(user) });
-    }
-
-    if (route === 'guest' || route === 'guest/use') {
-      const b = request.method === 'POST' ? await readJSON(request) : {};
-      const deviceId = String(b.deviceId || '');
-      if (!DEVICE_RE.test(deviceId)) return fail(400, 'Geçersiz cihaz kimliği.', 'invalid_device');
-      if (route === 'guest') return json(200, await guestStatus(deviceId));
-      if (request.method !== 'POST') return fail(405, 'POST kullan.');
-      const r = await guestUse(deviceId, ip);
-      return json(r.ok ? 200 : 402, r);
-    }
-
-    // Buradan sonrası oturum ister
-    const id = await identify(bearer);
-    if (!id || id.kind !== 'user') return fail(401, 'Oturum geçersiz. Yeniden giriş yap.', 'auth');
-    const user = id.user;
-
-    if (request.method === 'GET' && route === 'me') return json(200, { user: publicUser(user), daily: await dailyStatus(user.id) });
-
-    if (request.method === 'POST' && route === 'logout') {
-      await db.del('sessions', id.sessionHash);
-      user.sessions = (user.sessions || []).filter((h) => h !== id.sessionHash);
-      await db.put('users', user.email, user);
+    if (request.method === 'POST' && route === '/logout') {
+      await db.run('DELETE FROM sessions WHERE h = ?', await sha(bearer(request)));
       return json(200, { ok: true });
     }
-
-    if (request.method === 'POST' && route === 'update') {
-      const b = await readJSON(request);
-      const name = String(b.name || '').trim().replace(/\s+/g, ' ');
-      if (!name || name.length > 60) return fail(400, 'Adını yaz (en fazla 60 karakter).', 'invalid_name');
-      user.name = name;
-      await db.put('users', user.email, user);
-      return json(200, { user: publicUser(user) });
-    }
-
-    if (request.method === 'POST' && (route === 'password' || route === 'delete')) {
-      const b = await readJSON(request);
-      if (!(await checkPassword(String(b.password || ''), user))) return fail(401, 'Şifre hatalı.', 'bad_credentials');
-      if (route === 'password') {
-        const next = String(b.newPassword || '');
-        if (next.length < 8 || next.length > 200) return fail(400, 'Yeni şifre en az 8 karakter olmalı.', 'weak_password');
-        Object.assign(user, await hashPassword(next));
-        for (const h of user.sessions || []) if (h !== id.sessionHash) await db.del('sessions', h);
-        user.sessions = [id.sessionHash];
-        await db.put('users', user.email, user);
-        return json(200, { ok: true });
-      }
-      for (const h of user.sessions || []) await db.del('sessions', h);
-      await db.del('users', user.email);
+    if (request.method === 'POST' && route === '/password') {
+      if (String(b.next || '').length < 8) return fail(400, 'Yeni şifre en az 8 karakter olmalı.');
+      if (me.hash && !(await checkPassword(b.current, me.hash))) return fail(401, 'Mevcut şifre yanlış.', 'auth');
+      const h = await hashPassword(b.next);
+      await db.batch([
+        ['UPDATE users SET hash = ?, provider = ? WHERE id = ?', h, me.provider === 'google' ? 'sifre+google' : me.provider, me.id],
+        ['DELETE FROM sessions WHERE uid = ? AND h != ?', me.id, await sha(bearer(request))],
+      ]);
       return json(200, { ok: true });
     }
-
+    if (request.method === 'DELETE' && route === '/me') {
+      if (isAdmin(me)) return fail(403, 'Geliştirici hesabı silinemez.', 'auth');
+      if (me.hash && !(await checkPassword(b.password, me.hash))) return fail(401, 'Şifre yanlış.', 'auth');
+      await deleteUser(me.id);
+      return json(200, { ok: true });
+    }
     return fail(404, 'Bulunamadı');
   }
 
-  return { handle, identify, guestMayUseCloud, dailyUse, dailyStatus, GUEST_LIMIT, DAILY_LIMIT };
+  // ------------------------------------------------------------ /admin/... (yalnızca geliştirici)
+  async function admin(request, p, { json, fail, readJSON }, pool) {
+    const me = await userOf(request);
+    if (!isAdmin(me)) return fail(403, 'Bu işlem için geliştirici hesabı gerekir.', 'auth');
+    const route = p.replace(/^\/(v1\/)?admin/, '');
+    if (request.method === 'GET' && route === '/users') {
+      const now = Date.now();
+      const rows = await db.all(`SELECT u.*, (SELECT COUNT(*) FROM sessions s WHERE s.uid = u.id AND s.exp > ?) AS sessions,
+        (SELECT n FROM usage g WHERE g.uid = u.id AND g.day = ?) AS today, (SELECT COUNT(*) FROM chats c WHERE c.uid = u.id) AS chats
+        FROM users u ORDER BY u.created DESC LIMIT 1000`, now, today());
+      return json(200, { users: rows.map((u) => ({ ...publicUser(u), sessions: u.sessions, requests: u.requests, lastSeen: u.last_seen, today: u.today || 0, chats: u.chats, limit: isAdmin(u) || !DAILY ? null : DAILY })) });
+    }
+    const m = route.match(/^\/users\/([\w-]+)$/);
+    if (request.method === 'DELETE' && m) {
+      const u = await db.one('SELECT * FROM users WHERE id = ?', m[1]);
+      if (!u) return fail(404, 'Hesap bulunamadı.');
+      if (isAdmin(u)) return fail(403, 'Geliştirici hesabı silinemez.');
+      await deleteUser(u.id);
+      return json(200, { ok: true });
+    }
+    if (request.method === 'GET' && route === '/stats') {
+      const now = Date.now();
+      const [users, sessions, msgs] = await Promise.all([
+        db.one('SELECT COUNT(*) AS n FROM users'), db.one('SELECT COUNT(*) AS n FROM sessions WHERE exp > ?', now),
+        db.one('SELECT COALESCE(SUM(n), 0) AS n FROM usage WHERE day = ?', today()),
+      ]);
+      return json(200, {
+        users: users.n, sessions: sessions.n, messagesToday: msgs.n, registration: await registrationOpen(), dailyMessages: DAILY || null,
+        slots: pool.slots.length, ready: pool.slots.filter((s) => s.coolUntil <= now).length,
+        cooling: pool.slots.filter((s) => s.coolUntil > now).slice(0, 30).map((s) => ({ id: `${s.upstream}/${s.model}`, until: s.coolUntil })),
+        models: [...new Set(pool.slots.map((s) => `${s.upstream}/${s.model}`))],
+      });
+    }
+    if (request.method === 'POST' && route === '/settings') {
+      const b = await readJSON(request);
+      if (typeof b.registration === 'boolean') await db.setSetting('registration', b.registration);
+      return json(200, { ok: true, registration: await registrationOpen() });
+    }
+    return fail(404, 'Bulunamadı');
+  }
+
+  return { auth, admin, userOf, consume, refund, usageOf, limitMsg, isAdmin, registrationOpen, today, TZ, DAILY };
 }

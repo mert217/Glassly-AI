@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Glassly — Camdan berrak yapay zeka asistanı</title>
+<meta name="description" content="Glassly; günlük işlerine, yazılarına, kodlarına ve e-postalarına yardım eden açık kaynak yapay zeka asistanı. Tarayıcıda hemen başla ya da masaüstü uygulamasını indir." />
+<meta property="og:title" content="Glassly" />
+<meta property="og:description" content="Camdan berrak yapay zeka asistanı. Tarayıcıda ya da masaüstünde." />
+<meta property="og:image" content="https://glassly.biz/assets/aurora.webp" />
+<meta name="theme-color" content="#06071a" />
+<link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+<link rel="preload" href="/assets/fonts/geist-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin />
+<link rel="stylesheet" href="/assets/glass.css" />
+<style>
+  html { scroll-behavior: smooth; }
+  .wrap { width: min(1160px, calc(100% - 40px)); margin: 0 auto; }
+  header.nav { position: sticky; top: 0; z-index: 10; padding: 14px 0; }
+  header.nav .bar { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 8px 8px 8px 16px; border-radius: 18px; }
+  header.nav nav { display: flex; gap: 4px; align-items: center; }
+  header.nav nav a.link { padding: 8px 12px; border-radius: 10px; text-decoration: none; color: var(--text-2); font-size: 14px; }
+  header.nav nav a.link:hover { color: var(--text); background: var(--glass); }
+
+  .hero { padding: 72px 0 40px; text-align: center; }
+  .pill { display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px 6px 8px; border-radius: 999px; font-size: 13px; color: var(--text-2); }
+  .pill b { padding: 2px 8px; border-radius: 999px; background: linear-gradient(135deg, #7a68ff, #3fb8ff); color: #fff; font-weight: 600; font-size: 11.5px; }
+  h1 { font-size: clamp(40px, 7vw, 76px); line-height: 1.02; letter-spacing: -.035em; margin: 22px auto 18px; max-width: 14ch; font-weight: 700; }
+  h1 .grad { background: linear-gradient(100deg, #b4a8ff 10%, #6fd8ff 55%, #f19be8 95%); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  [data-theme='frost'] h1 .grad { background-image: linear-gradient(100deg, #5b49e8, #0b8fc4 55%, #c93fb3); }
+  .lead { font-size: clamp(16px, 2vw, 19px); color: var(--text-2); max-width: 58ch; margin: 0 auto 30px; }
+  .ctas { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+  .ctas small { display: block; width: 100%; color: var(--muted); font-size: 13px; margin-top: 4px; }
+
+  .shot { margin: 56px auto 0; padding: 10px; border-radius: 26px; max-width: 1080px; position: relative; }
+  .shot img { display: block; width: 100%; height: auto; border-radius: 18px; aspect-ratio: 1400 / 880; object-fit: cover; }
+  .shot .swap { position: absolute; right: 22px; top: 22px; display: flex; gap: 4px; padding: 4px; border-radius: 12px; }
+  .shot .swap button { border: 0; background: transparent; padding: 6px 12px; border-radius: 9px; font-size: 13px; cursor: pointer; color: var(--text-2); }
+  .shot .swap button[aria-pressed='true'] { background: var(--glass-strong); color: var(--text); }
+
+  section { padding: 84px 0; }
+  .kicker { color: var(--accent-2); font-weight: 600; font-size: 13px; letter-spacing: .08em; text-transform: uppercase; }
+  h2 { font-size: clamp(30px, 4.2vw, 46px); letter-spacing: -.03em; line-height: 1.08; margin: 10px 0 14px; }
+  .sub { color: var(--text-2); max-width: 60ch; font-size: 17px; margin: 0; }
+  .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-top: 40px; }
+  .card { padding: 24px; }
+  .card .ic { width: 42px; height: 42px; border-radius: 12px; display: grid; place-items: center; background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 40%, transparent), color-mix(in srgb, var(--accent-2) 30%, transparent)); border: 1px solid var(--stroke); margin-bottom: 16px; }
+  .card .ic svg { width: 21px; height: 21px; }
+  .card h3 { margin: 0 0 6px; font-size: 17px; letter-spacing: -.01em; }
+  .card p { margin: 0; color: var(--text-2); font-size: 14.5px; }
+
+  .dl { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-top: 36px; }
+  .dl a { display: flex; flex-direction: column; gap: 4px; padding: 20px; text-decoration: none; transition: transform .2s var(--ease), border-color .2s; }
+  .dl a:hover { transform: translateY(-3px); border-color: var(--stroke-hi); }
+  .dl a.me { border-color: color-mix(in srgb, var(--accent) 65%, transparent); box-shadow: var(--shadow), 0 0 0 4px color-mix(in srgb, var(--accent) 16%, transparent); }
+  .dl b { font-size: 16px; } .dl span { color: var(--muted); font-size: 13px; }
+  .dl .tag { align-self: flex-start; margin-top: 10px; font-size: 12px; padding: 3px 9px; border-radius: 999px; border: 1px solid var(--stroke); color: var(--text-2); }
+  .note { margin-top: 18px; color: var(--muted); font-size: 13.5px; }
+  .note code { font-family: var(--mono); font-size: 12.5px; padding: 2px 6px; border-radius: 6px; background: var(--code-bg); border: 1px solid var(--stroke); }
+
+  .band { padding: 44px; display: grid; grid-template-columns: 1.2fr 1fr; gap: 32px; align-items: center; border-radius: var(--r-xl); }
+  .band ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 12px; }
+  .band li { display: flex; gap: 10px; color: var(--text-2); }
+  .band li::before { content: ''; flex: none; width: 8px; height: 8px; margin-top: 8px; border-radius: 50%; background: linear-gradient(135deg, var(--accent), var(--accent-2)); }
+
+  footer { padding: 40px 0 60px; color: var(--muted); font-size: 13.5px; }
+  footer .wrap { display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; border-top: 1px solid var(--stroke); padding-top: 24px; }
+  footer a { color: var(--text-2); text-decoration: none; } footer a:hover { color: var(--text); }
+
+  .reveal { opacity: 0; transform: translateY(18px); transition: opacity .7s var(--ease), transform .7s var(--ease); }
+  .reveal.in { opacity: 1; transform: none; }
+  @media (max-width: 920px) { .grid { grid-template-columns: 1fr 1fr; } .dl { grid-template-columns: 1fr 1fr; } .band { grid-template-columns: 1fr; padding: 28px; } }
+  @media (max-width: 620px) {
+    .grid, .dl { grid-template-columns: 1fr; }
+    header.nav nav a.link { display: none; }
+    .hero { padding-top: 44px; } section { padding: 60px 0; }
+    .shot { margin-top: 40px; padding: 6px; border-radius: 18px; } .shot img { border-radius: 13px; }
+    .shot .swap { right: 12px; top: 12px; }
+    .ctas .btn { width: 100%; }
+  }
+</style>
+</head>
+<body>
+<div class="aurora" aria-hidden="true"><i></i><i></i><i></i></div>
+
+<header class="nav">
+  <div class="wrap">
+    <div class="bar glass">
+      <a class="logo" href="/"><img src="/assets/logo.svg" alt="" width="30" height="30" />Glassly</a>
+      <nav>
+        <a class="link" href="#ozellikler">Özellikler</a>
+        <a class="link" href="#indir">İndir</a>
+        <a class="link" href="https://github.com/mert217/Glassly-AI" rel="noopener">Kaynak kod</a>
+        <a class="btn sm primary" href="/app/" id="navApp">Giriş yap</a>
+      </nav>
+    </div>
+  </div>
+</header>
+
+<main>
+  <div class="hero wrap">
+    <span class="pill glass reveal"><b>Yeni</b> Glassly artık tarayıcıda da çalışıyor</span>
+    <h1 class="reveal">Camdan berrak bir <span class="grad">yapay zeka asistanı</span></h1>
+    <p class="lead reveal">Günlük işlerin, yazıların, kodların ve e-postaların için tek bir yer. Glassly anlar, düzenler, yazar ve senin yerine işleri halleder.</p>
+    <div class="ctas reveal">
+      <a class="btn lg primary" href="/app/">Tarayıcıda başla
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a>
+      <a class="btn lg" href="#indir" id="heroDl">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg>
+        <span>Uygulamayı indir</span></a>
+      <small>Ücretsiz. Her gün 70 mesaj hakkı.</small>
+    </div>
+    <figure class="shot glass reveal">
+      <img id="shotImg" src="/assets/aurora.webp" alt="Glassly masaüstü uygulamasının ekran görüntüsü" width="1400" height="880" fetchpriority="high" />
+      <div class="swap glass" role="group" aria-label="Tema">
+        <button type="button" data-shot="aurora" aria-pressed="true">Aurora</button>
+        <button type="button" data-shot="frost" aria-pressed="false">Frost</button>
+      </div>
+    </figure>
+  </div>
+
+  <section id="ozellikler">
+    <div class="wrap">
+      <div class="kicker reveal">Özellikler</div>
+      <h2 class="reveal">Günlük hayatının yardımcısı</h2>
+      <p class="sub reveal">Sohbetten fazlası. Glassly bağlantılarınla çalışır, dosyalarını okur ve sen onaylamadan hiçbir şeyi göndermez.</p>
+      <div class="grid">
+        <div class="card glass reveal"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2v4M16 2v4M3 10h18M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"/></svg></div><h3>Günlük işler</h3><p>Plan yap, liste çıkar, metin yaz, çeviri yap, bir konuyu sade anlat. Hazır kısayollarla tek tıkla başla.</p></div>
+        <div class="card glass reveal"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"/><path d="m22 6-10 7L2 6"/></svg></div><h3>Gmail, Drive, GitHub</h3><p>Hesaplarını bağla; e-postalarını özetlesin, yanıt taslağı yazsın, onayınla göndersin. Dosyalarını ve depolarını bulsun.</p></div>
+        <div class="card glass reveal"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m16 18 6-6-6-6M8 6l-6 6 6 6"/></svg></div><h3>Kod yazar, düzeltir</h3><p>Masaüstünde projeni açar, dosyaları okur, değişiklik önerir ve terminalde komut çalıştırır. Her adımda sana sorar.</p></div>
+        <div class="card glass reveal"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2M12 19v3"/></svg></div><h3>Sesle konuş</h3><p>Yazmak istemediğinde konuş. Glassly seni dinler, cevabını sesli okur.</p></div>
+        <div class="card glass reveal"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></div><h3>Sen yönetirsin</h3><p>E-posta göndermek, dosya değiştirmek gibi her önemli adım önce senin onayını bekler. Hesabın sadece sana ait.</p></div>
+        <div class="card glass reveal"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15 15 0 0 1 0 20M12 2a15 15 0 0 0 0 20"/></svg></div><h3>Her yerde</h3><p>Tarayıcıdan, telefondan ya da Windows, Linux ve macOS uygulamasından aynı hesapla gir.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="wrap">
+      <div class="band glass reveal">
+        <div>
+          <div class="kicker">Açık kaynak</div>
+          <h2>Şeffaf, hafif, senin</h2>
+          <p class="sub">Glassly açık kaynaklı geliştirilir. Kodun tamamı GitHub'da; nasıl çalıştığını görebilir, kendi sunucunda bile çalıştırabilirsin.</p>
+          <p style="margin-top:22px"><a class="btn" href="https://github.com/mert217/Glassly-AI" rel="noopener"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 .5a11.5 11.5 0 0 0-3.64 22.41c.58.1.79-.25.79-.56v-2c-3.2.7-3.88-1.37-3.88-1.37-.52-1.33-1.28-1.69-1.28-1.69-1.05-.71.08-.7.08-.7 1.16.08 1.77 1.19 1.77 1.19 1.03 1.77 2.7 1.26 3.36.96.1-.75.4-1.26.73-1.55-2.55-.29-5.24-1.28-5.24-5.68 0-1.25.45-2.28 1.18-3.08-.12-.29-.51-1.46.11-3.04 0 0 .97-.31 3.17 1.18a11 11 0 0 1 5.77 0c2.2-1.49 3.17-1.18 3.17-1.18.63 1.58.23 2.75.11 3.04.74.8 1.18 1.83 1.18 3.08 0 4.41-2.69 5.38-5.25 5.67.41.36.78 1.06.78 2.14v3.17c0 .31.21.67.8.56A11.5 11.5 0 0 0 12 .5z"/></svg>GitHub'da gör</a></p>
+        </div>
+        <ul>
+          <li>Hesap açmak ücretsiz, her gün 70 mesaj hakkın var.</li>
+          <li>Sohbetlerin hesabında saklanır, istediğin an silebilirsin.</li>
+          <li>Google ile tek tıkla giriş, ya da e-posta ve şifre.</li>
+          <li>Aurora ve Frost temaları, karanlık ve aydınlık.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section id="indir">
+    <div class="wrap">
+      <div class="kicker reveal">İndir</div>
+      <h2 class="reveal">Glassly'yi bilgisayarına kur</h2>
+      <p class="sub reveal">Masaüstü uygulaması dosyalarınla, terminalinle ve e-postanla çalışabilir. Tarayıcıdaki hesabınla giriş yaparsın.</p>
+      <div class="dl" id="dl">
+        <a class="glass reveal" data-os="windows" href="https://github.com/mert217/Glassly-AI/releases/latest/download/Glassly-Setup.exe"><b>Windows</b><span>Windows 10 ve 11</span><em class="tag">.exe</em></a>
+        <a class="glass reveal" data-os="linux" href="https://github.com/mert217/Glassly-AI/releases/latest/download/Glassly.AppImage"><b>Linux</b><span>Tüm dağıtımlar</span><em class="tag">.AppImage</em></a>
+        <a class="glass reveal" data-os="ubuntu" href="https://github.com/mert217/Glassly-AI/releases/latest/download/Glassly.deb"><b>Ubuntu / Debian</b><span>Paket olarak kur</span><em class="tag">.deb</em></a>
+        <a class="glass reveal" data-os="mac" href="https://github.com/mert217/Glassly-AI/releases/latest/download/Glassly.dmg"><b>macOS</b><span>Apple Silicon ve Intel</span><em class="tag">.dmg</em></a>
+      </div>
+      <p class="note reveal">Ubuntu'da: <code>sudo apt install ./Glassly.deb</code> · AppImage için: <code>chmod +x Glassly.AppImage && ./Glassly.AppImage</code> · Tüm sürümler <a href="https://github.com/mert217/Glassly-AI/releases">GitHub sürümler sayfasında</a>.</p>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <span>© <span id="yr">2026</span> Glassly</span>
+    <span><a href="/app/">Web uygulaması</a> · <a href="#indir">İndir</a> · <a href="https://github.com/mert217/Glassly-AI">GitHub</a></span>
+  </div>
+</footer>
+
+<script>
+  document.getElementById('yr').textContent = new Date().getFullYear();
+  // Tema önizlemesi
+  const img = document.getElementById('shotImg');
+  document.querySelectorAll('[data-shot]').forEach((b) => b.addEventListener('click', () => {
+    img.src = '/assets/' + b.dataset.shot + '.webp';
+    document.querySelectorAll('[data-shot]').forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
+  }));
+  // İşletim sistemini tanı, uygun indirmeyi öne çıkar
+  const ua = navigator.userAgent;
+  const os = /Windows/i.test(ua) ? 'windows' : /Android|iPhone|iPad/i.test(ua) ? '' : /Mac/i.test(ua) ? 'mac' : /Ubuntu|Debian/i.test(ua) ? 'ubuntu' : /Linux/i.test(ua) ? 'linux' : '';
+  const names = { windows: 'Windows için indir', mac: 'macOS için indir', ubuntu: 'Ubuntu için indir', linux: 'Linux için indir' };
+  const pick = os && document.querySelector('.dl a[data-os="' + os + '"]');
+  if (pick) {
+    pick.classList.add('me');
+    const h = document.getElementById('heroDl'); h.href = pick.href; h.querySelector('span').textContent = names[os];
+  }
+  // Oturum açıksa "Giriş yap" yerine "Uygulamaya git"
+  try { if (localStorage.getItem('glassly.token') || sessionStorage.getItem('glassly.token')) document.getElementById('navApp').textContent = 'Uygulamaya git'; } catch {}
+  // Görünür olunca belir
+  const io = new IntersectionObserver((es) => es.forEach((e) => { if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); } }), { threshold: .12 });
+  document.querySelectorAll('.reveal').forEach((el) => io.observe(el));
+</script>
+</body>
+</html>

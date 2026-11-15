@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="tr" data-theme="aurora" data-accent="iris">
+<head>
+  <meta charset="utf-8" />
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self'; img-src 'self' data: blob: https:; media-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; script-src 'self' 'wasm-unsafe-eval' https://cdn.jsdelivr.net; worker-src 'self' blob:; connect-src 'self' data: blob: https://huggingface.co https://*.huggingface.co https://*.hf.co https://cdn.jsdelivr.net" />
+  <title>Glassly</title>
+  <link rel="stylesheet" href="../../node_modules/@fontsource-variable/geist/index.css" />
+  <link rel="stylesheet" href="../../node_modules/@fontsource-variable/geist-mono/index.css" />
+  <link rel="stylesheet" href="styles.css" />
+  <script src="../../node_modules/marked/lib/marked.umd.js"></script>
+  <script src="../../node_modules/dompurify/dist/purify.min.js"></script>
+  <script src="../../node_modules/@highlightjs/cdn-assets/highlight.min.js"></script>
+</head>
+<body>
+  <!-- Arka plan: yavaşça dolaşan ışık kümeleri + ince doku -->
+  <div class="backdrop" aria-hidden="true">
+    <div class="orb orb-a"></div><div class="orb orb-b"></div><div class="orb orb-c"></div>
+    <div class="grain"></div>
+  </div>
+
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <defs>
+      <linearGradient id="g-mark" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0" stop-color="var(--accent-1)" />
+        <stop offset="1" stop-color="var(--accent-2)" />
+      </linearGradient>
+      <symbol id="logo" viewBox="0 0 32 32">
+        <rect x="3" y="7" width="18" height="20" rx="5.5" fill="url(#g-mark)" opacity=".55" />
+        <rect x="10" y="4" width="19" height="21" rx="5.5" fill="url(#g-mark)" />
+        <rect x="10.6" y="4.6" width="17.8" height="19.8" rx="5" fill="none" stroke="#fff" stroke-opacity=".55" stroke-width="1.2" />
+        <path d="M14 15.5 L19.5 10" stroke="#fff" stroke-opacity=".8" stroke-width="1.8" stroke-linecap="round" />
+        <path d="M17 18.5 L24 11.5" stroke="#fff" stroke-opacity=".45" stroke-width="1.8" stroke-linecap="round" />
+      </symbol>
+    </defs>
+  </svg>
+
+  <div class="app" id="app">
+    <!-- Sol ray -->
+    <nav class="rail glass" aria-label="Ana menü">
+      <div class="rail-top">
+        <button class="rail-logo" id="btnHome" title="Glassly" aria-label="Ana ekran">
+          <svg width="28" height="28"><use href="#logo" /></svg>
+        </button>
+        <button class="rail-btn" id="btnNew" data-tip="Yeni sohbet  ⌘N" aria-label="Yeni sohbet"><i data-icon="plus"></i></button>
+        <button class="rail-btn" id="btnSessions" data-tip="Sohbetler  ⌘B" aria-label="Sohbetler"><i data-icon="layers"></i></button>
+        <button class="rail-btn" id="btnPalette" data-tip="Komut paleti  ⌘K" aria-label="Komut paleti"><i data-icon="search"></i></button>
+        <button class="rail-btn" id="btnInspector" data-tip="Görev paneli  ⌘I" aria-label="Görev paneli"><i data-icon="panel"></i></button>
+      </div>
+      <div class="rail-bottom">
+        <button class="rail-btn rail-conn" id="btnConn" data-tip="Bağlantılar (Gmail, Drive, GitHub)" aria-label="Bağlantılar"><i data-icon="plug"></i></button>
+        <button class="rail-btn" id="btnTheme" data-tip="Tema" aria-label="Temayı değiştir"><i data-icon="moon"></i></button>
+        <button class="rail-btn" id="btnSettings" data-tip="Ayarlar  ⌘," aria-label="Ayarlar"><i data-icon="gear"></i></button>
+        <button class="rail-avatar" id="btnAccount" data-tip="Hesabım" aria-label="Hesabım"><span id="avatarText"></span></button>
+      </div>
+    </nav>
+
+    <!-- Sohbet listesi -->
+    <aside class="sessions glass" id="sessions" aria-label="Sohbetler">
+      <div class="mode-tabs" id="modeTabs" role="tablist" aria-label="Kullanım">
+        <button type="button" role="tab" data-mode="gunluk"><i data-icon="spark"></i>Günlük</button>
+        <button type="button" role="tab" data-mode="kod"><i data-icon="terminal"></i>Kod</button>
+      </div>
+      <button class="project-chip" id="projectChip" title="Proje klasörünü değiştir">
+        <i data-icon="folder"></i>
+        <span class="project-name" id="projectName">Klasör seç</span>
+        <i data-icon="chevron" class="dim"></i>
+      </button>
+      <label class="search-field">
+        <i data-icon="search"></i>
+        <input id="sessionFilter" placeholder="Sohbetlerde ara" autocomplete="off" />
+      </label>
+      <div class="session-list" id="sessionList"></div>
+    </aside>
+
+    <!-- Ana alan -->
+    <main class="stage" id="stage">
+      <header class="topbar">
+        <div class="title-wrap">
+          <input class="session-title" id="sessionTitle" value="" placeholder="Yeni sohbet" spellcheck="false" />
+        </div>
+        <div class="engine-pill" id="enginePill" role="status"><span class="dot"></span><span class="label">Bağlanıyor</span></div>
+      </header>
+
+      <section class="welcome" id="welcome">
+        <div class="welcome-card">
+          <svg class="welcome-mark" width="64" height="64"><use href="#logo" /></svg>
+          <h1>Glassly</h1>
+          <p class="lede" id="welcomeLede">Kodunu berrak görür. Dosya okur, düzenler, komut çalıştırır — ücretsiz, anahtar gerekmeden.</p>
+          <div class="welcome-actions" id="welcomeActions">
+            <button class="btn primary" id="btnOpenFolder"><i data-icon="folder"></i>Klasör aç</button>
+            <button class="btn ghost" id="btnQuickChat"><i data-icon="spark"></i>Hızlı sohbet</button>
+          </div>
+          <div class="recent" id="recentProjects"></div>
+          <div class="recent conn-chips" id="connChips"></div>
+        </div>
+        <div class="ideas" id="ideas"></div>
+      </section>
+
+      <section class="thread" id="thread" hidden>
+        <div class="thread-inner" id="threadInner"></div>
+      </section>
+
+      <div class="banner" id="banner" hidden></div>
+
+      <!-- Yazma kapsülü -->
+      <form class="composer glass" id="composer" autocomplete="off">
+        <div class="attachments" id="attachments"></div>
+        <div class="voice-bar" id="voiceBar" hidden><span class="vb-wave" id="vbWave"><i></i><i></i><i></i><i></i><i></i></span><span class="vb-text" id="vbText">Dinliyorum…</span><button type="button" class="btn sm ghost" id="vbStop">Bitir</button><button type="button" class="vb-x" id="vbCancel" aria-label="Vazgeç"><i data-icon="x"></i></button></div>
+        <textarea id="input" rows="1" placeholder="Glassly'ye bir iş ver…  ( / komutlar · @ dosya )"></textarea>
+        <div class="composer-bar">
+          <div class="seg" id="agentSeg" role="radiogroup" aria-label="Mod">
+            <button type="button" data-agent="build" role="radio">İnşa</button>
+            <button type="button" data-agent="plan" role="radio">Plan</button>
+          </div>
+          <button type="button" class="model-chip" id="modelChip"><span class="model-dot"></span><span id="modelLabel">Model</span><i data-icon="chevron"></i></button>
+          <span class="usage" id="usage"></span>
+          <button type="button" class="comp-btn" id="btnAttach" data-tip="Dosya ekle (PDF, Word, görsel)" aria-label="Dosya ekle"><i data-icon="paperclip"></i></button>
+          <button type="button" class="comp-btn" id="btnVoiceChat" data-tip="Sesli sohbet" aria-label="Sesli sohbet"><i data-icon="wave"></i></button>
+          <button type="button" class="comp-btn" id="btnMic" data-tip="Konuşarak yaz" aria-label="Konuşarak yaz"><i data-icon="mic"></i></button>
+          <button type="submit" class="send" id="send" aria-label="Gönder"><i data-icon="arrow"></i></button>
+        </div>
+        <div class="popover" id="suggest" hidden></div>
+      </form>
+    </main>
+
+    <!-- Görev paneli -->
+    <aside class="inspector glass" id="inspector" aria-label="Görev paneli">
+      <div class="insp-section">
+        <h3><i data-icon="check"></i>Yapılacaklar</h3>
+        <div id="todoList" class="todo-list"><p class="empty">Ajan plan çıkardığında burada görünür.</p></div>
+      </div>
+      <div class="insp-section" id="remSection">
+        <h3><i data-icon="bell"></i>Hatırlatıcılar<button class="insp-add" id="remAdd" aria-label="Hatırlatıcı ekle" title="Hatırlatıcı ekle"><i data-icon="plus"></i></button></h3>
+        <div id="remList" class="rem-list"><p class="empty">"Yarın 9'da bana hatırlat" de, burada görünsün.</p></div>
+      </div>
+      <div class="insp-section" id="diffSection">
+        <h3><i data-icon="diff"></i>Değişen dosyalar</h3>
+        <div id="diffList" class="diff-list"><p class="empty">Henüz değişiklik yok.</p></div>
+      </div>
+      <div class="insp-section">
+        <h3><i data-icon="pulse"></i>Oturum</h3>
+        <dl class="stats" id="stats"></dl>
+      </div>
+    </aside>
+  </div>
+
+  <!-- Katmanlar -->
+  <div class="layer" id="paletteLayer" hidden>
+    <div class="palette glass" role="dialog" aria-label="Komut paleti">
+      <label class="palette-input"><i data-icon="search"></i><input id="paletteInput" placeholder="Komut, sohbet veya model ara…" /></label>
+      <div class="palette-list" id="paletteList"></div>
+    </div>
+  </div>
+  <div class="layer" id="modelLayer" hidden>
+    <div class="picker glass" role="dialog" aria-label="Model seç">
+      <label class="palette-input"><i data-icon="search"></i><input id="modelFilter" placeholder="Model ara…" /></label>
+      <div class="picker-list" id="modelList"></div>
+    </div>
+  </div>
+  <div class="layer" id="settingsLayer" hidden></div>
+  <div class="layer" id="dialogLayer" hidden></div>
+  <div class="auth" id="auth" hidden></div>
+  <div class="toasts" id="toasts"></div>
+  <div class="drop-hint" id="dropHint" hidden><div class="glass">
+    <i data-icon="paperclip"></i><b>Dosyayı bırak</b><span>PDF, Word, metin veya görsel</span></div></div>
+
+  <script src="icons.js"></script>
+  <script src="markdown.js"></script>
+  <script src="voice.js"></script>
+  <script src="app.js" type="module"></script>
+</body>
+</html>

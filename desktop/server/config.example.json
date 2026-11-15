@@ -1,0 +1,41 @@
+{
+  "port": 8787,
+  "accessKeys": [],
+  "accounts": true,
+  "admins": [],
+  "dailyMessages": 70,
+  "timezone": "Europe/Istanbul",
+  "developer": { "email": "ahmetmertevci@gmail.com", "name": "Ahmet", "passwordHash": "scrypt$/9bNiKrgCbWCqLxq9OozRA==$Vm4PGuSlw4WpMhAzZo2R0kXOVFKE4xBjt6PK/3m8O7uoScp98PlihZrIQL1SIsXI62T1ITjd57ZEXzS+qYhGoA==" },
+  "registration": true,
+  "googleClientIds": [],
+  "sessionDays": 90,
+  "rateLimitPerMinute": 30,
+  "maxTries": 12,
+  "fallback": true,
+  "upstreams": [
+    {
+      "name": "gemini",
+      "baseURL": "https://generativelanguage.googleapis.com/v1beta/openai",
+      "keys": ["$GEMINI_KEY_1", "$GEMINI_KEY_2"],
+      "models": ["gemini-2.5-flash"]
+    },
+    {
+      "name": "groq",
+      "baseURL": "https://api.groq.com/openai/v1",
+      "keys": ["$GROQ_KEY"],
+      "models": ["llama-3.3-70b-versatile"]
+    },
+    {
+      "name": "openrouter",
+      "baseURL": "https://openrouter.ai/api/v1",
+      "keys": ["$OPENROUTER_KEY"],
+      "models": ["deepseek/deepseek-chat-v3-0324:free"]
+    },
+    {
+      "name": "cerebras",
+      "baseURL": "https://api.cerebras.ai/v1",
+      "keys": ["$CEREBRAS_KEY"],
+      "models": ["llama-3.3-70b"]
+    }
+  ]
+}

@@ -1,0 +1,79 @@
+# Glassly masaüstü uygulamasını Windows, Linux ve macOS için derler, GitHub sürümüne yükler.
+# Çalıştırmak için: yeni bir sürüm etiketi gönder (ör. v0.2.0) ya da Actions → "Masaüstü sürümü" → Run workflow.
+name: Masaüstü sürümü
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Sürüm etiketi (ör. v0.2.0)'
+        required: true
+        default: 'v0.1.0'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: desktop
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+      - name: Bulut ve Google ayarları
+        env:
+          GOOGLE_OAUTH_JSON: ${{ secrets.GOOGLE_OAUTH_JSON }}
+        run: |
+          echo '{ "name": "Glassly Bulut", "url": "https://glassly.biz/v1", "key": "" }' > resources/cloud.json
+          if [ -n "$GOOGLE_OAUTH_JSON" ]; then printf '%s' "$GOOGLE_OAUTH_JSON" > resources/google-oauth.json; fi
+          rm -f resources/gelistirici.json
+      - name: Ses tanıma kütüphanesini aç
+        run: gunzip -kf src/renderer/vendor/transformers.min.js.gz
+      - run: npm ci
+      - name: Derle
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+        run: npx electron-builder --publish never
+      - uses: actions/upload-artifact@v4
+        with:
+          name: glassly-${{ matrix.os }}
+          path: |
+            desktop/release/Glassly-Setup.exe
+            desktop/release/Glassly.AppImage
+            desktop/release/Glassly.deb
+            desktop/release/Glassly.dmg
+          if-no-files-found: ignore
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: out
+          merge-multiple: true
+      - run: ls -la out
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.inputs.tag || github.ref_name }}
+          name: Glassly ${{ github.event.inputs.tag || github.ref_name }}
+          make_latest: true
+          files: out/*
+          body: |
+            Glassly masaüstü uygulaması.
+            - Windows: Glassly-Setup.exe
+            - Linux: Glassly.AppImage ya da Glassly.deb (Ubuntu: `sudo apt install ./Glassly.deb`)
+            - macOS: Glassly.dmg (imzasız; ilk açılışta sağ tık → Aç)

@@ -1,278 +1,206 @@
-// Glassly Bulut (Cloudflare Workers): OpenAI uyumlu model havuzu + hesaplar.
-// Birden çok sağlayıcıyı ve anahtarı tek adreste toplar; limit dolan anahtar/modeli
-// soğumaya alır ve isteği otomatik olarak sıradakine yönlendirir.
+// Glassly — glassly.biz
+// Tek bir Cloudflare Worker: tanıtım sayfası + web uygulaması (public/), hesaplar (/auth),
+// geliştirici paneli (/admin), web sohbeti (/api) ve masaüstü uygulamasının bağlandığı
+// OpenAI uyumlu bulut (/v1). Veriler Cloudflare D1'de durur.
 
-import defaultConfig from './config.json';
+import { CORS, setupPool, publicModels, limited, ensureDiscovery, openUpstream } from './pool.js';
 import { openDB } from './db.js';
-import { createAuth } from './auth.js';
+import { createAccounts } from './auth.js';
 
-const CORS = {
-  'access-control-allow-origin': '*',
-  'access-control-allow-headers': 'authorization, content-type',
-  'access-control-allow-methods': 'GET, POST, OPTIONS',
-  'access-control-max-age': '86400',
-};
-const json = (status, body) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json', ...CORS } });
-const fail = (status, message, type = 'glassly_error') => json(status, { error: { message, type } });
-async function readJSON(request) { try { return JSON.parse((await request.text()) || '{}'); } catch { return {}; } }
 const log = (...a) => console.log(...a);
+const json = (status, obj, extra = {}) => new Response(JSON.stringify(obj), { status, headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store', ...CORS, ...extra } });
+const fail = (status, message, type = 'glassly_error') => json(status, { error: { message, type } });
+async function readJSON(request) {
+  const t = await request.text();
+  if (t.length > 2e6) throw Object.assign(new Error('İstek çok büyük'), { status: 413 });
+  try { return t ? JSON.parse(t) : {}; } catch { return {}; }
+}
+const helpers = { json, fail, readJSON };
 
-// ---- Bir kez kurulan durum (Worker kopyası yaşadığı sürece bellekte kalır)
-let state;
-function setup(env) {
-  if (state) return state;
-  let cfg = defaultConfig;
-  if (env.GLASSLY_CONFIG_JSON) { try { cfg = JSON.parse(env.GLASSLY_CONFIG_JSON); } catch { log('GLASSLY_CONFIG_JSON geçersiz, varsayılan kullanılıyor'); } }
+const SYSTEM = (u, TZ) => [
+  'Sen Glassly\'sin: kullanıcının günlük işlerine, yazılarına, sorularına ve kodlarına yardım eden, sıcak ve net konuşan bir yapay zeka asistanı.',
+  'Kim olduğun sorulursa yalnızca "Ben Glassly\'yim" de. Arka planda hangi modelin, şirketin ya da sağlayıcının çalıştığından asla bahsetme; yanıtların arasında bir değişiklik olduysa bunu söyleme.',
+  'Kullanıcı hangi dilde yazıyorsa o dilde cevap ver; varsayılan dil Türkçe. Gereksiz uzatma, gerektiğinde başlık, liste, tablo ve kod bloğu kullan (Markdown).',
+  'Bu web sürümünde dosya sistemine, terminale, e-postaya ya da internete erişimin yok; bunlar gerekirse kullanıcıya Glassly masaüstü uygulamasını önerebilirsin.',
+  `Kullanıcının adı: ${u.name}. Bugünün tarihi: ${new Date().toLocaleDateString('tr-TR', { timeZone: TZ, weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}.`,
+].join('\n');
 
-  const slots = [];
-  const pending = [];
-  for (const u of cfg.upstreams || []) {
-    if (u.type === 'workers-ai') {
-      // Cloudflare Workers AI: "AI" bağlantısı üzerinden çalışır, anahtar gerekmez
-      if (!env.AI) { log('Uyarı: AI bağlantısı yok, workers-ai atlandı'); continue; }
-      for (const model of u.models || []) slots.push({ id: `${u.name}/${model}#ai`, upstream: u.name, model, ai: true, tier: Number(u.tier || 2), coolUntil: 0, fails: 0 });
-      continue;
-    }
-    // "keyless": true olan sağlayıcılar anahtar istemez (Authorization başlığı gönderilmez)
-    const keys = u.keyless ? [null] : (u.keys || []).map((k) => (k.startsWith('$') ? env[k.slice(1)] : k)).filter(Boolean);
-    // "discover": true → model listesi sağlayıcının /models adresinden ilk istekte otomatik çekilir
-    if (u.discover) for (const [ki, key] of keys.entries()) pending.push({ u, key, ki, baseURL: u.baseURL.replace(/\/$/, '') });
-    for (const model of u.models || []) {
-      for (const [ki, key] of keys.entries()) {
-        slots.push({ id: `${u.name}/${model}#${ki}`, upstream: u.name, baseURL: u.baseURL.replace(/\/$/, ''), key, model, headers: u.headers || {}, tier: Number(u.tier || 2), coolUntil: 0, fails: 0 });
-      }
+const REPO = 'mert217/Glassly-AI';
+const DL = (f) => `https://github.com/${REPO}/releases/latest/download/${f}`;
+const DOWNLOADS = [
+  { os: 'windows', label: 'Windows', file: 'Glassly-Setup.exe', url: DL('Glassly-Setup.exe') },
+  { os: 'linux', label: 'Linux (AppImage)', file: 'Glassly.AppImage', url: DL('Glassly.AppImage') },
+  { os: 'linux-deb', label: 'Ubuntu / Debian (.deb)', file: 'Glassly.deb', url: DL('Glassly.deb') },
+  { os: 'mac', label: 'macOS', file: 'Glassly.dmg', url: DL('Glassly.dmg') },
+];
+
+const streaming = new Set(); // aynı anda kullanıcı başına tek yanıt
+const title = (t) => { const s = String(t).replace(/\s+/g, ' ').trim(); return s.length > 48 ? s.slice(0, 46) + '…' : s || 'Yeni sohbet'; };
+
+// OpenAI SSE akışından metin parçalarını çıkarır
+async function* deltas(body) {
+  const reader = body.getReader(); const dec = new TextDecoder(); let buf = '';
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buf += dec.decode(value, { stream: true });
+    let i;
+    while ((i = buf.indexOf('\n')) >= 0) {
+      const line = buf.slice(0, i).trim(); buf = buf.slice(i + 1);
+      if (!line.startsWith('data:')) continue;
+      const d = line.slice(5).trim();
+      if (d === '[DONE]') return;
+      try { const j = JSON.parse(d); const t = j.choices?.[0]?.delta?.content ?? j.choices?.[0]?.message?.content; if (t) yield t; } catch { /* parça */ }
     }
   }
-  if (!slots.length) log('Uyarı: kullanılabilir model yok (ne anahtar ne anahtarsız sağlayıcı).');
-
-  const access = new Set([...(cfg.accessKeys || []), ...String(env.GLASSLY_ACCESS_KEYS || '').split(',').map((s) => s.trim()).filter(Boolean)]);
-  const db = openDB(env.DB);
-  state = {
-    cfg, slots, pending, discoverAt: 0, discoveredOnce: false, access, db, ai: env.AI,
-    auth: createAuth(db, env),
-    rpm: Number(cfg.rateLimitPerMinute ?? 30),
-    maxTries: Number(cfg.maxTries ?? 14),
-    timeoutStream: Number(cfg.timeoutStreamMs ?? 9000),
-    timeoutPlain: Number(cfg.timeoutPlainMs ?? 20000),
-    budgetMs: Number(cfg.budgetMs ?? 45000),
-    requireAuth: String(env.GLASSLY_REQUIRE_AUTH ?? cfg.requireAuth ?? 'true') !== 'false',
-    cursor: 0,
-    hits: new Map(),
-  };
-  return state;
 }
 
-const publicModels = (S) => ['auto', ...new Set(S.slots.map((s) => `${s.upstream}/${s.model}`))];
-
-function candidates(S, requested) {
-  const now = Date.now();
-  const ready = (s) => s.coolUntil <= now;
-  const rr0 = (list) => { const n = list.length; if (!n) return []; const start = S.cursor++ % n; return [...list.slice(start), ...list.slice(0, start)]; };
-  // Önce hiç hata yapmamış, iyi katmandaki (tier 1) modeller; her katmanın içinde sırayla dağıt
-  const rr = (list) => [...new Set(list.map((s) => s.tier || 2))].sort((a, b) => a - b).flatMap((t) => { const g = list.filter((s) => (s.tier || 2) === t); return [...rr0(g.filter((s) => !s.fails)), ...rr0(g.filter((s) => s.fails))]; });
-  if (requested && requested !== 'auto') {
-    const exact = S.slots.filter((s) => `${s.upstream}/${s.model}` === requested && ready(s));
-    const rest = S.cfg.fallback === false ? [] : S.slots.filter((s) => `${s.upstream}/${s.model}` !== requested && ready(s));
-    return [...rr(exact), ...rr(rest)];
+async function webApi(request, p, ctx, { db, acc, S, env }) {
+  if (p === '/api/config') {
+    return json(200, { googleClientId: env.GLASSLY_GOOGLE_WEB_CLIENT_ID || '', registration: await acc.registrationOpen(), dailyMessages: acc.DAILY || null, downloads: DOWNLOADS, repo: `https://github.com/${REPO}` });
   }
-  return rr(S.slots.filter(ready));
-}
+  const me = await acc.userOf(request);
+  if (!me) return fail(401, 'Oturumun sona ermiş. Tekrar giriş yap.', 'auth');
 
-function coolDown(slot, status, retryAfter) {
-  slot.fails++;
-  let ms = status === 429 ? 60e3 : status === 402 || status === 403 || status === 401 ? 30 * 60e3 : 20e3;
-  const ra = Number(retryAfter);
-  if (ra > 0) ms = Math.min(ra * 1000, 6 * 3600e3);
-  slot.coolUntil = Date.now() + ms * Math.min(slot.fails, 4);
-  log(`soğumada: ${slot.id} (${status}) ${Math.round((slot.coolUntil - Date.now()) / 1000)} sn`);
-}
-
-function limited(S, who) {
-  if (!S.rpm) return false;
-  const now = Date.now();
-  const arr = (S.hits.get(who) || []).filter((t) => now - t < 60e3);
-  arr.push(now); S.hits.set(who, arr);
-  if (S.hits.size > 5000) for (const [k, a] of S.hits) if (!a.some((t) => now - t < 60e3)) S.hits.delete(k);
-  return arr.length > S.rpm;
-}
-
-// ---- Otomatik model keşfi: model adları eskidiğinde elle düzeltmek gerekmez
-const NOT_CHAT = /embed|whisper|tts|guard|moderat|rerank|image|ocr|transcri|audio|speech|dall|flux|sdxl|stable-diff|video|vision-only|clip|safety|bge-|e5-|minilm|nomic|gte-/i;
-async function ensureDiscovery(S) {
-  if (!S.pending.length) return;
-  const now = Date.now();
-  if (now - S.discoverAt < (S.discoveredOnce ? 6 * 3600e3 : 5 * 60e3)) return;
-  S.discoverAt = now;
-  const found = (await Promise.all(S.pending.map(async (p) => {
-    try {
-      const r = await fetch(`${p.baseURL}/models`, { headers: p.key ? { authorization: `Bearer ${p.key}` } : {}, signal: AbortSignal.timeout(5000) });
-      if (!r.ok) { log(`keşif başarısız: ${p.u.name} HTTP ${r.status}`); return []; }
-      const j = await r.json();
-      let list = (j.data || j.models || []).map((m) => (typeof m === 'string' ? { id: m } : { ...m, id: m.id || m.name || m.model })).filter((m) => m.id && !NOT_CHAT.test(m.id));
-      if (p.u.free) list = list.filter((m) => /:free$|-free$/i.test(m.id) || (m.pricing && Number(m.pricing.prompt) === 0 && Number(m.pricing.completion) === 0));
-      const prefer = (p.u.prefer || []).map((x) => x.toLowerCase());
-      const rank = (id) => { const i = prefer.findIndex((x) => id.toLowerCase().includes(x)); return i < 0 ? 999 : i; };
-      list.sort((a, b) => rank(a.id) - rank(b.id));
-      return list.slice(0, Number(p.u.limit || 6)).map((m) => ({ p, model: m.id }));
-    } catch (e) { log(`keşif hatası: ${p.u.name} ${e.message}`); return []; }
-  }))).flat();
-  if (!found.length) return;
-  const old = new Map(S.slots.filter((x) => x.disc).map((x) => [x.id, x.coolUntil]));
-  const have = new Set(S.slots.filter((x) => !x.disc).map((x) => x.id));
-  S.slots = S.slots.filter((x) => !x.disc);
-  for (const { p, model } of found) {
-    const id = `${p.u.name}/${model}#${p.ki}`;
-    if (have.has(id) || S.slots.some((x) => x.id === id)) continue;
-    S.slots.push({ id, upstream: p.u.name, baseURL: p.baseURL, key: p.key, model, headers: p.u.headers || {}, coolUntil: old.get(id) || 0, fails: 0, disc: true, tier: Number(p.u.tier || 2) });
+  if (p === '/api/chats' && request.method === 'GET') {
+    return json(200, { chats: await db.all('SELECT id, title, updated FROM chats WHERE uid = ? ORDER BY updated DESC LIMIT 300', me.id) });
   }
-  S.discoveredOnce = true;
-  log(`keşif tamam: ${S.slots.length} model yuvası`);
-}
-
-// ---- Workers AI yardımcıları (OpenAI biçimine çevirir)
-const completionId = () => 'chatcmpl-' + crypto.randomUUID();
-function aiStreamToOpenAI(stream, model) {
-  const dec = new TextDecoder(), enc = new TextEncoder(), id = completionId();
-  let buf = '', sentRole = false, sawChoices = false;
-  const chunk = (delta, finish = null) => enc.encode('data: ' + JSON.stringify({ id, object: 'chat.completion.chunk', created: Math.floor(Date.now() / 1000), model, choices: [{ index: 0, delta, finish_reason: finish }] }) + '\n\n');
-  return stream.pipeThrough(new TransformStream({
-    transform(raw, ctl) {
-      buf += dec.decode(raw, { stream: true });
-      const lines = buf.split('\n'); buf = lines.pop();
-      for (const line of lines) {
-        if (!line.startsWith('data:')) continue;
-        const data = line.slice(5).trim();
-        if (!data) continue;
-        if (data === '[DONE]') { if (!sawChoices) ctl.enqueue(chunk({}, 'stop')); ctl.enqueue(enc.encode('data: [DONE]\n\n')); continue; }
-        let j; try { j = JSON.parse(data); } catch { continue; }
-        if (j.choices) { sawChoices = true; ctl.enqueue(enc.encode('data: ' + data + '\n\n')); continue; }
-        if (typeof j.response === 'string' && j.response) {
-          ctl.enqueue(chunk(sentRole ? { content: j.response } : { role: 'assistant', content: j.response }));
-          sentRole = true;
-        }
-      }
-    },
-  }));
-}
-async function runWorkersAI(S, slot, body) {
-  const input = { messages: body.messages || [], stream: !!body.stream };
-  for (const k of ['max_tokens', 'temperature', 'top_p']) if (body[k] != null) input[k] = body[k];
-  const out = await S.ai.run(slot.model, input);
-  const headers = { 'x-glassly-upstream': `${slot.upstream}/${slot.model}`, ...CORS };
-  if (body.stream) {
-    return new Response(aiStreamToOpenAI(out, slot.model), { status: 200, headers: { 'content-type': 'text/event-stream', 'cache-control': 'no-cache', ...headers } });
+  if (p === '/api/chats' && request.method === 'DELETE') {
+    await db.batch([['DELETE FROM messages WHERE chat_id IN (SELECT id FROM chats WHERE uid = ?)', me.id], ['DELETE FROM chats WHERE uid = ?', me.id]]);
+    return json(200, { ok: true });
   }
-  const text = out?.response ?? out?.choices?.[0]?.message?.content ?? '';
-  return new Response(JSON.stringify({
-    id: completionId(), object: 'chat.completion', created: Math.floor(Date.now() / 1000), model: slot.model,
-    choices: [{ index: 0, message: { role: 'assistant', content: typeof text === 'string' ? text : JSON.stringify(text) }, finish_reason: 'stop' }],
-    usage: out?.usage || {},
-  }), { status: 200, headers: { 'content-type': 'application/json', ...headers } });
-}
-
-const withTimeout = (promise, ms, label) => Promise.race([promise, new Promise((_, rej) => setTimeout(() => rej(new Error(`zaman aşımı (${label})`)), ms))]);
-const DEAD_MODEL = /not.?found|no such model|unknown model|does not exist|deprecat|decommission|retired|invalid model|model.*(not|unavailable|unsupported)/i;
-function killSlot(slot, hours = 6) { slot.fails = 4; slot.coolUntil = Date.now() + hours * 3600e3; log(`devre dışı: ${slot.id} (${hours} sa)`); }
-
-async function proxy(S, request, route) {
-  let body;
-  try { body = JSON.parse((await request.text()) || '{}'); } catch { return fail(400, 'Geçersiz JSON'); }
-  const list = candidates(S, body.model);
-  if (!list.length) return fail(503, 'Tüm modeller şu an soğumada, biraz sonra tekrar dene.', 'overloaded');
-  const firstByteMs = body.stream ? S.timeoutStream : S.timeoutPlain; // takılan sağlayıcıyı beklemeden sıradakine geç
-  const deadline = Date.now() + S.budgetMs;
-  let lastErr = '';
-  for (const slot of list.slice(0, S.maxTries)) {
-    if (Date.now() > deadline) break;
-    if (slot.ai) {
-      try { const resp = await withTimeout(runWorkersAI(S, slot, body), firstByteMs, slot.id); slot.fails = 0; log(`→ ${slot.id} 200`); return resp; }
-      catch (e) {
-        lastErr = `${slot.upstream}: ${String(e.message || e).slice(0, 200)}`;
-        if (DEAD_MODEL.test(lastErr)) killSlot(slot); else coolDown(slot, /allocation|limit|4006|quota/i.test(lastErr) ? 402 : 500);
-        continue;
-      }
+  const m = p.match(/^\/api\/chats\/([\w-]{8,64})$/);
+  if (m) {
+    const c = await db.one('SELECT * FROM chats WHERE id = ? AND uid = ?', m[1], me.id);
+    if (!c) return fail(404, 'Sohbet bulunamadı.');
+    if (request.method === 'GET') {
+      const messages = await db.all('SELECT role, content, t FROM messages WHERE chat_id = ? ORDER BY id', c.id);
+      return json(200, { id: c.id, title: c.title, updated: c.updated, messages });
     }
-    const ac = new AbortController();
-    const timer = setTimeout(() => ac.abort(), firstByteMs);
-    const onAbort = () => ac.abort();
-    request.signal.addEventListener('abort', onAbort, { once: true });
-    let r;
-    try {
-      r = await fetch(`${slot.baseURL}${route}`, {
-        method: 'POST', signal: ac.signal,
-        headers: { 'content-type': 'application/json', ...(slot.key ? { authorization: `Bearer ${slot.key}` } : {}), ...slot.headers },
-        body: JSON.stringify({ ...body, model: slot.model }),
-      });
-    } catch (e) {
-      clearTimeout(timer);
-      if (request.signal.aborted) return new Response(null, { status: 499 });
-      lastErr = `${slot.upstream}: ${e.message || 'zaman aşımı'}`; coolDown(slot, 0); continue;
+    if (request.method === 'PATCH') {
+      const b = await readJSON(request); const t = title(b.title || '');
+      await db.run('UPDATE chats SET title = ? WHERE id = ?', t, c.id);
+      return json(200, { ok: true, title: t });
     }
-    clearTimeout(timer); // ilk yanıt geldi; akış başladıktan sonra süre sınırı yok
-    if ([400, 410, 422].includes(r.status)) {
-      const t = (await r.clone().text().catch(() => '')).slice(0, 300);
-      if (DEAD_MODEL.test(t)) { lastErr = `${slot.upstream}: HTTP ${r.status} ${t}`; killSlot(slot); continue; }
+    if (request.method === 'DELETE') {
+      await db.batch([['DELETE FROM messages WHERE chat_id = ?', c.id], ['DELETE FROM chats WHERE id = ?', c.id]]);
+      return json(200, { ok: true });
     }
-    if ([401, 402, 403, 404, 408, 409, 429].includes(r.status) || r.status >= 500) {
-      lastErr = `${slot.upstream}: HTTP ${r.status} ${(await r.text().catch(() => '')).slice(0, 200)}`;
-      if (r.status === 404) killSlot(slot); else coolDown(slot, r.status, r.headers.get('retry-after'));
-      continue;
-    }
-    slot.fails = 0;
-    log(`→ ${slot.id} ${r.status}`);
-    const headers = { 'content-type': r.headers.get('content-type') || 'application/json', 'x-glassly-upstream': `${slot.upstream}/${slot.model}`, ...CORS };
-    if (body.stream) headers['cache-control'] = 'no-cache';
-    return new Response(r.body, { status: r.status, headers });
   }
-  return fail(503, 'Şu an uygun model yok, birazdan tekrar dene. Son hata: ' + lastErr, 'overloaded');
-}
 
-async function handle(request, env) {
-  if (!env.DB) return fail(500, 'KV bağlantısı (DB) yok. Worker → Settings → Bindings bölümünden "DB" adlı bir KV ekle.');
-  const S = setup(env);
-  await ensureDiscovery(S);
-  const url = new URL(request.url);
-  const p = url.pathname.replace(/\/+$/, '');
-  const ip = request.headers.get('cf-connecting-ip') || '';
+  if (p === '/api/chat' && request.method === 'POST') {
+    const b = await readJSON(request);
+    const text = String(b.text || '').trim().slice(0, 32000);
+    let chat = b.chatId ? await db.one('SELECT * FROM chats WHERE id = ? AND uid = ?', String(b.chatId), me.id) : null;
+    if (b.chatId && !chat) return fail(404, 'Sohbet bulunamadı.');
+    if (!b.regenerate && !text) return fail(400, 'Bir mesaj yaz.');
+    if (b.regenerate && !chat) return fail(400, 'Yeniden yazılacak sohbet yok.');
+    if (streaming.has(me.id)) return fail(429, 'Önceki yanıt hâlâ yazılıyor, bitmesini bekle.', 'busy');
+    if (!acc.isAdmin(me) && limited(S, 'user:' + me.id)) return fail(429, 'Çok hızlı mesaj gönderiyorsun, bir dakika bekle.', 'rate_limit');
+    const usage = await acc.consume(me);
+    if (!usage) return fail(429, acc.limitMsg(), 'daily_limit');
 
-  if (p === '' || p === '/health') {
     const now = Date.now();
-    return json(200, { ok: true, runtime: 'cloudflare', models: publicModels(S).length, ready: S.slots.filter((s) => s.coolUntil <= now).length, total: S.slots.length, users: await S.db.count('users') });
-  }
-
-  const authRes = await S.auth.handle(request, p, ip, { json, fail, readJSON });
-  if (authRes) return authRes;
-
-  if (p === '/v1/models' || p === '/models') {
-    return json(200, { object: 'list', data: publicModels(S).map((id) => ({ id, object: 'model', owned_by: 'glassly' })) });
-  }
-  if (request.method === 'POST' && /\/(v1\/)?chat\/completions$/.test(p)) {
-    const tok = (request.headers.get('authorization') || '').replace(/^Bearer\s+/i, '');
-    let who = ip;
-    if (S.access.size && S.access.has(tok)) who = 'key:' + tok.slice(0, 8);
-    else {
-      const id = await S.auth.identify(tok);
-      if (id?.kind === 'user') {
-        const d = await S.auth.dailyUse(id.user.id);
-        if (!d.ok) return fail(429, `Günlük ${d.limit} mesaj hakkın doldu, yarın (00:00 UTC) sıfırlanır.`, 'daily_limit');
-        who = 'user:' + id.user.id;
-      } else if (S.auth.guestMayUseCloud(id)) who = 'guest:' + id.deviceId;
-      else if (S.requireAuth || S.access.size) {
-        return fail(401, id?.kind === 'guest' ? `Hesapsız ${S.auth.GUEST_LIMIT} mesaj hakkın doldu. Devam etmek için giriş yap ya da kayıt ol.` : 'Giriş yapman gerekiyor.', 'auth');
-      }
+    if (!chat) {
+      chat = { id: crypto.randomUUID(), title: title(text), created: now, updated: now };
+      await db.run('INSERT INTO chats (id, uid, title, created, updated) VALUES (?, ?, ?, ?, ?)', chat.id, me.id, chat.title, now, now);
     }
-    if (limited(S, who)) return fail(429, 'Çok hızlı istek gönderiyorsun, bir dakika bekle.', 'rate_limit');
-    return proxy(S, request, '/chat/completions');
+    let history = await db.all('SELECT id, role, content FROM messages WHERE chat_id = ? ORDER BY id DESC LIMIT 41', chat.id);
+    history.reverse();
+    if (b.regenerate) {
+      const last = history[history.length - 1];
+      if (last?.role === 'assistant') { await db.run('DELETE FROM messages WHERE id = ?', last.id); history.pop(); }
+      if (!history.length || history[history.length - 1].role !== 'user') { await acc.refund(me); return fail(400, 'Yeniden yazılacak mesaj yok.'); }
+    } else {
+      await db.run('INSERT INTO messages (chat_id, role, content, t) VALUES (?, ?, ?, ?)', chat.id, 'user', text, now);
+      history.push({ role: 'user', content: text });
+    }
+    // Bağlam: son 40 mesaj, en fazla ~48 bin karakter
+    const ctxMsgs = []; let size = 0;
+    for (let i = history.length - 1; i >= 0 && ctxMsgs.length < 40; i--) {
+      size += history[i].content.length; if (size > 48000 && ctxMsgs.length) break;
+      ctxMsgs.unshift({ role: history[i].role, content: history[i].content });
+    }
+
+    const { readable, writable } = new TransformStream();
+    const w = writable.getWriter(); const enc = new TextEncoder();
+    const send = (o) => w.write(enc.encode(`data: ${JSON.stringify(o)}\n\n`)).catch(() => {});
+    streaming.add(me.id);
+    const work = (async () => {
+      let out = '';
+      try {
+        await send({ type: 'chat', id: chat.id, title: chat.title });
+        const r = await openUpstream(S, { model: 'auto', stream: true, messages: [{ role: 'system', content: SYSTEM(me, acc.TZ) }, ...ctxMsgs] }, request.signal);
+        if (!r.body) throw new Error('boş yanıt');
+        for await (const t of deltas(r.body)) { out += t; await send({ type: 'delta', text: t }); if (request.signal?.aborted) break; }
+        if (!out.trim()) throw new Error('boş yanıt');
+      } catch (e) {
+        log('sohbet hatası', e.message);
+        if (!out.trim()) { await acc.refund(me).catch(() => {}); await send({ type: 'error', message: request.signal?.aborted ? 'Durduruldu.' : 'Şu an yanıt veremiyorum, birazdan tekrar dene.' }); }
+      } finally {
+        streaming.delete(me.id);
+        if (out.trim()) {
+          await db.batch([
+            ['INSERT INTO messages (chat_id, role, content, t) VALUES (?, ?, ?, ?)', chat.id, 'assistant', out, Date.now()],
+            ['UPDATE chats SET updated = ? WHERE id = ?', Date.now(), chat.id],
+          ]).catch((e) => log('kayıt hatası', e.message));
+        }
+        await send({ type: 'done', usage: await acc.usageOf(me).catch(() => usage) });
+        await w.close().catch(() => {});
+      }
+    })();
+    ctx.waitUntil(work);
+    return new Response(readable, { headers: { 'content-type': 'text/event-stream; charset=utf-8', 'cache-control': 'no-cache', 'x-accel-buffering': 'no', ...CORS } });
   }
   return fail(404, 'Bulunamadı');
 }
 
+async function handle(request, env, ctx) {
+  const url = new URL(request.url);
+  if (url.hostname.startsWith('www.')) { url.hostname = url.hostname.slice(4); return Response.redirect(url.toString(), 301); }
+  const p = url.pathname.replace(/\/+$/, '') || '/';
+  if (!env.DB) return fail(500, 'Veritabanı (DB) bağlı değil. wrangler.jsonc içindeki d1_databases ayarını kontrol et.');
+  const db = openDB(env.DB);
+  const S = setupPool(env);
+  const acc = createAccounts(db, env);
+  const ip = request.headers.get('cf-connecting-ip') || '';
+
+  if (p === '/health') {
+    await ensureDiscovery(S);
+    const now = Date.now();
+    return json(200, { ok: true, runtime: 'cloudflare', ready: S.slots.filter((s) => s.coolUntil <= now).length, total: S.slots.length });
+  }
+  if (/^\/(v1\/)?auth\//.test(p)) return acc.auth(request, p, ip, helpers);
+  if (/^\/(v1\/)?admin\//.test(p)) { await ensureDiscovery(S); return acc.admin(request, p, helpers, S); }
+  if (p.startsWith('/api/')) { await ensureDiscovery(S); return webApi(request, p, ctx, { db, acc, S, env }); }
+
+  // ---- Masaüstü uygulamasının bağlandığı OpenAI uyumlu uç
+  if (p === '/v1/models' || p === '/v1') {
+    await ensureDiscovery(S);
+    return json(200, { object: 'list', data: publicModels(S).map((id) => ({ id, object: 'model', owned_by: 'glassly' })) });
+  }
+  if (request.method === 'POST' && p === '/v1/chat/completions') {
+    const me = await acc.userOf(request);
+    if (!me && env.GLASSLY_OPEN_PROXY !== 'true') return fail(401, 'Glassly Bulut için giriş yapman gerekiyor.', 'auth');
+    if (!acc.isAdmin(me) && limited(S, me ? 'user:' + me.id : 'ip:' + ip)) return fail(429, 'Çok hızlı istek gönderiyorsun, bir dakika bekle.', 'rate_limit');
+    // Masaüstü uygulaması hakkı /auth/usage ile düşer; burada yalnızca hakkın bitip bitmediğine bakılır
+    if (me) { const q = await acc.usageOf(me); if (!q.unlimited && q.left <= 0) return fail(429, acc.limitMsg(), 'daily_limit'); }
+    await ensureDiscovery(S);
+    let body;
+    try { body = await readJSON(request); } catch (e) { return fail(e.status || 400, e.message); }
+    try { return await openUpstream(S, body, request.signal); }
+    catch (e) { return fail(e.status || 503, e.message, 'overloaded'); }
+  }
+  if (p.startsWith('/v1/')) return fail(404, 'Bulunamadı');
+  return env.ASSETS.fetch(request);
+}
+
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: CORS });
-    try { return await handle(request, env); } catch (e) {
+    try { return await handle(request, env, ctx); } catch (e) {
       log('hata', e.stack || e.message);
-      return fail(500, 'Sunucu hatası');
+      return fail(e.status || 500, e.status ? e.message : 'Sunucu hatası');
     }
   },
 };

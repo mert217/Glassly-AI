@@ -1,0 +1,8 @@
+node_modules/
+.wrangler/
+.dev.vars
+desktop/node_modules/
+desktop/dist/
+desktop/resources/google-oauth.json
+desktop/resources/gelistirici.json
+desktop/src/renderer/vendor/transformers.min.js

@@ -1,15 +1,34 @@
-# Glassly Bulut — Cloudflare sürümü
+# Glassly — glassly.biz
 
-Glassly için hesaplar (kayıt/giriş, misafir hakkı) ve OpenAI uyumlu model havuzu. GitHub'a yükle, Cloudflare'e bağla, çalışsın.
+Glassly'nin internetteki evi. Tek bir Cloudflare Worker şunların hepsini sunar:
 
-## Kurulum (GitHub → Cloudflare)
+- **Tanıtım sayfası** (`/`) — uygulama indirme bağlantılarıyla
+- **Web uygulaması** (`/app/`) — tarayıcıdan sohbet, hesap, ayarlar, geliştirici paneli
+- **Hesaplar** (`/auth/*`) — e-posta + şifre ya da Google; web ve masaüstü aynı hesabı kullanır
+- **Glassly Bulut** (`/v1/*`) — masaüstü uygulamasının bağlandığı OpenAI uyumlu model havuzu
+- Veriler **Cloudflare D1** veritabanında durur (ilk yayında kendiliğinden oluşur)
 
-1. Bu klasörün **içindekileri** (package.json, wrangler.jsonc, src/ ...) yeni bir GitHub deposunun kök dizinine yükle.
-2. Cloudflare paneli → **Workers & Pages** → **Create** → **Import a repository** (Workers) → GitHub'ı bağla, depoyu seç.
-   - Build command: boş bırak
-   - Deploy command: `npx wrangler deploy` (varsayılan)
-3. **Deploy**'a bas. İlk yayında `DB` adlı KV alanı otomatik oluşturulur.
-4. **Anahtar şart değil.** Anahtarsız çalışanlar: `cloudflare` (Workers AI, günlük ücretsiz kota), `ovh`, `kilo`, `llm7`, `pollinations`. Daha fazlası için aşağıdaki ücretsiz anahtarları (kart gerekmez) Worker → **Settings → Variables and Secrets** → **Secret** olarak ekle; eklemediğin sağlayıcı sessizce atlanır:
+Masaüstü uygulamasının kaynak kodu `desktop/` klasöründedir. Yeni bir sürüm etiketi (`v0.2.0` gibi) gönderildiğinde GitHub Actions Windows, Linux ve macOS kurulum dosyalarını derleyip **Releases** sayfasına koyar; tanıtım sayfasındaki indirme düğmeleri her zaman en son sürümü gösterir.
+
+## Yayına alma (GitHub → Cloudflare)
+
+1. Cloudflare paneli → **Workers & Pages** → **Create application** → **Import a repository** → GitHub hesabını bağla → `Glassly-AI` deposunu seç.
+   - Project name: `glassly-bulut`
+   - Build command: boş
+   - Deploy command: `npx wrangler deploy`
+   - **Create and deploy**'a bas.
+2. Worker → **Settings** → **Variables and Secrets** → **Add** → Type: **Secret**
+   - Name: `GLASSLY_DEVELOPER`
+   - Value: `e-posta|şifre-özeti` (şifre özeti `node scripts/sifre-ozeti.mjs 'ŞİFREN'` ile üretilir)
+   - **Deploy**'a bas.
+3. `glassly.biz` alan adı aynı Cloudflare hesabında olduğu için `wrangler.jsonc` içindeki `routes` ile kendiliğinden bağlanır. Olmazsa: Worker → **Settings** → **Domains & Routes** → **Add** → **Custom domain** → `glassly.biz`.
+4. Kontrol: `https://glassly.biz/health` → `{"ok":true,...}`
+
+Bundan sonra GitHub'a her gönderimde Cloudflare siteyi kendiliğinden yeniden yayınlar.
+
+## Model kaynakları
+
+Anahtar şart değil: `cloudflare` (Workers AI, günlük ücretsiz kota) ve anahtarsız sağlayıcılar kendiliğinden çalışır. Daha fazla kapasite için aşağıdaki ücretsiz anahtarları **Secret** olarak ekleyebilirsin; eklemediğin sağlayıcı sessizce atlanır.
 
    | Secret adı | Sağlayıcı | Alınacağı yer |
    | --- | --- | --- |
@@ -26,45 +45,32 @@ Glassly için hesaplar (kayıt/giriş, misafir hakkı) ve OpenAI uyumlu model ha
    | `COHERE_KEY` | Cohere (deneme anahtarı) | dashboard.cohere.com |
    | `DEEPSEEK_KEY` | DeepSeek | platform.deepseek.com (kullanım ücretli olabilir) |
 
-   `config.json` içinde `"discover": true` olan sağlayıcıların model listesi ilk istekte `/models` adresinden otomatik çekilir (6 saatte bir yenilenir), model adları eskirse elle düzeltmek gerekmez.
-5. Kontrol: `https://glassly-bulut.<hesabın>.workers.dev/health` → `{"ok":true,...}`
-6. İstersen **Settings → Domains & Routes** ile `api.glassly.biz` gibi kendi alan adını bağla.
 
-## Glassly uygulamasına tanıtma
-
-Masaüstü uygulamanın `resources/cloud.json` dosyasına adresini yaz:
-
-```json
-{ "name": "Glassly Bulut", "url": "https://glassly-bulut.HESABIN.workers.dev/v1", "key": "" }
-```
-
-## Ayarlar (hepsi isteğe bağlı, Variables bölümünden)
+## Ayarlar (`wrangler.jsonc` → `vars`, ya da panelden)
 
 | Değişken | Varsayılan | Açıklama |
 | --- | --- | --- |
-| `GLASSLY_GUEST_LIMIT` | `1` | Hesap açmadan kullanılabilecek toplam mesaj hakkı (hakkı bitince giriş/kayıt istenir) |
-| `GLASSLY_DAILY_LIMIT` | `50` | Hesap açan kullanıcının günlük mesaj kotası (UTC gece yarısı sıfırlanır); `0` = sınırsız |
-| `GLASSLY_GUEST_IP_DAILY` | `40` | Aynı IP'den günlük misafir mesajı |
+| `GLASSLY_DAILY_LIMIT` | `70` | Günlük mesaj hakkı (geliştirici sınırsız); `0` = herkes sınırsız |
+| `GLASSLY_TIMEZONE` | `Europe/Istanbul` | Günlük hakkın sıfırlandığı saat dilimi |
+| `GLASSLY_GOOGLE_CLIENT_IDS` | masaüstü istemcisi | Kabul edilen Google istemci kimlikleri (virgüllü) |
+| `GLASSLY_GOOGLE_WEB_CLIENT_ID` | boş | Doluysa web uygulamasında "Google ile devam et" görünür (Google Cloud'da **Web application** türünde istemci, Authorized JavaScript origins: `https://glassly.biz`) |
+| `GLASSLY_ADMINS` | boş | Ek geliştirici e-postaları (virgüllü) |
+| `GLASSLY_REGISTRATION` | `true` | İlk açılışta kayıt açık mı (sonra geliştirici panelinden değiştirilir) |
 | `GLASSLY_SESSION_DAYS` | `90` | Oturum süresi |
-| `GLASSLY_REQUIRE_AUTH` | `true` | `false` olursa bulut modelleri herkese açılır |
-| `GLASSLY_ACCESS_KEYS` | yok | Virgüllü erişim anahtarları |
-| `GLASSLY_CONFIG_JSON` | yok | `src/config.json` yerine tüm yapılandırma (model listesi) |
-| `GLASSLY_PBKDF2_ITER` | `100000` | Şifre özet turu (en çok 100000) |
+| `GLASSLY_PBKDF2_ITER` | `100000` | Yeni şifreler için özet turu; ücretsiz planda CPU sınırına takılırsa düşür |
+| `GLASSLY_OPEN_PROXY` | `false` | `true` olursa `/v1` giriş yapmadan da kullanılabilir |
+| `GLASSLY_CONFIG_JSON` | yok | `src/config.json` yerine tüm model yapılandırması |
 
-Modelleri değiştirmek için `src/config.json` dosyasını düzenleyip GitHub'a yükle; Cloudflare kendiliğinden yeniden yayınlar.
+## Yerelde deneme
 
-## Takılmaya karşı
-
-- Bir sağlayıcı 9 sn (akışlı) / 20 sn (akışsız) içinde ilk yanıtı vermezse beklemeden sıradakine geçilir (`timeoutStreamMs`, `timeoutPlainMs`); bir isteğin toplam bütçesi 45 sn'dir (`budgetMs`).
-- Modeli artık olmayan sağlayıcılar (404, "model not found") 6 saatliğine devre dışı bırakılır; limit dolanlar kısa süre soğumaya alınır.
-- `auto` modunda önce iyi katman (anahtarlı sağlayıcılar), sonra anahtarsız büyük modeller, en son küçük modeller denenir.
-
-## Önemli notlar
-
-- Bu sürüm eski GoDaddy sürümündeki hesapları taşımaz (şifre algoritması farklı); kullanıcılar yeniden kayıt olur.
-- Hesaplar KV'de durur. KV "eventual consistency" olduğu için aynı anda gelen çok hızlı istekler misafir sayacını birkaç mesaj şaşırtabilir; sorun değil.
-- Şifre özeti (PBKDF2) Cloudflare ücretsiz planda CPU sınırına takılırsa giriş/kayıt hata verebilir. O zaman `GLASSLY_PBKDF2_ITER` değerini düşür ya da Workers Paid planına geç.
+```bash
+npm install
+npx wrangler dev
+```
 
 ## Uç noktalar
 
-`GET /health`, `GET /v1/models`, `POST /v1/chat/completions`, `POST /auth/register`, `/auth/login`, `GET /auth/me`, `POST /auth/logout`, `/auth/update`, `/auth/password`, `/auth/delete`, `/auth/guest`, `/auth/guest/use`
+- Hesap: `POST /auth/register`, `/auth/login`, `/auth/google`, `/auth/logout`, `/auth/password` · `GET|PATCH|DELETE /auth/me` · `GET|POST /auth/usage`
+- Geliştirici: `GET /admin/users`, `DELETE /admin/users/:id`, `GET /admin/stats`, `POST /admin/settings`
+- Web: `GET /api/config`, `GET|DELETE /api/chats`, `GET|PATCH|DELETE /api/chats/:id`, `POST /api/chat` (akışlı)
+- Bulut: `GET /v1/models`, `POST /v1/chat/completions`, `GET /health`

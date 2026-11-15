@@ -1,0 +1,92 @@
+{
+  "name": "glassly",
+  "productName": "Glassly",
+  "version": "0.1.0",
+  "description": "Cam gibi berrak, açık kaynak AI kod asistanı — opencode motoruyla.",
+  "main": "src/main/main.js",
+  "author": {
+    "name": "Glassly",
+    "email": "destek@glassly.biz"
+  },
+  "license": "MIT",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --dev",
+    "mock": "node tools/mock-engine.js",
+    "dist": "electron-builder",
+    "dist:win": "electron-builder --win",
+    "dist:mac": "electron-builder --mac",
+    "dist:linux": "electron-builder --linux"
+  },
+  "build": {
+    "appId": "app.glassly.desktop",
+    "productName": "Glassly",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "src/**/*",
+      "node_modules/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "resources",
+        "to": "resources"
+      }
+    ],
+    "win": {
+      "target": [
+        "nsis"
+      ],
+      "icon": "build/icon.png"
+    },
+    "mac": {
+      "target": [
+        "dmg"
+      ],
+      "category": "public.app-category.developer-tools",
+      "icon": "build/icon.png"
+    },
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "category": "Development",
+      "icon": "build/icon.png",
+      "maintainer": "Glassly <destek@glassly.biz>"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "artifactName": "Glassly-Setup.${ext}"
+    },
+    "publish": null,
+    "dmg": {
+      "artifactName": "Glassly.${ext}"
+    },
+    "appImage": {
+      "artifactName": "Glassly.${ext}"
+    },
+    "deb": {
+      "artifactName": "Glassly.${ext}"
+    }
+  },
+  "dependencies": {
+    "@fontsource-variable/geist": "^5.3.0",
+    "@fontsource-variable/geist-mono": "^5.3.0",
+    "@highlightjs/cdn-assets": "^11.12.0",
+    "dompurify": "^3.4.17",
+    "mammoth": "^1.13.0",
+    "marked": "^15.0.12",
+    "msedge-tts": "^2.1.1",
+    "unpdf": "^1.7.0"
+  },
+  "devDependencies": {
+    "electron": "^45.3.2",
+    "electron-builder": "^26.18.0"
+  },
+  "homepage": "https://glassly.biz"
+}

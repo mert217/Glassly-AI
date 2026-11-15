@@ -1,0 +1,11 @@
+node_modules/
+release/
+dist/
+.DS_Store
+*.log
+server/config.json
+server/.env
+resources/google-oauth.json
+resources/github-oauth.json
+server/data/
+resources/gelistirici.json

@@ -2,11 +2,30 @@
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "glassly-bulut",
   "main": "src/index.js",
-  "compatibility_date": "2025-09-01",
+  "compatibility_date": "2026-05-01",
+  "compatibility_flags": ["nodejs_compat", "enable_request_signal"],
   "observability": { "enabled": true },
-  // Hesaplar ve oturumlar burada saklanır. "id" yazmana gerek yok:
-  // ilk yayınlamada Cloudflare "DB" adlı KV alanını kendisi oluşturur.
-  "kv_namespaces": [{ "binding": "DB" }],
+  // Tanıtım sayfası ve web uygulaması. API yolları önce Worker'a gider.
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS",
+    "not_found_handling": "404-page",
+    "run_worker_first": ["/api/*", "/auth/*", "/admin/*", "/v1/*", "/v1", "/health"]
+  },
+  // Hesaplar, oturumlar ve sohbetler. "database_id" yazmana gerek yok:
+  // ilk yayınlamada Cloudflare "glassly-db" adlı D1 veritabanını kendisi oluşturur.
+  "d1_databases": [{ "binding": "DB", "database_name": "glassly-db" }],
   // Cloudflare'in ücretsiz Workers AI'ı: anahtar gerekmez, günlük ücretsiz kota vardır
-  "ai": { "binding": "AI" }
+  "ai": { "binding": "AI" },
+  // glassly.biz alan adı Cloudflare hesabında olduğu için otomatik bağlanır
+  "routes": [
+    { "pattern": "glassly.biz", "custom_domain": true },
+    { "pattern": "www.glassly.biz", "custom_domain": true }
+  ],
+  "vars": {
+    "GLASSLY_DAILY_LIMIT": "70",
+    "GLASSLY_TIMEZONE": "Europe/Istanbul",
+    "GLASSLY_GOOGLE_CLIENT_IDS": "95721514458-rjd8iqovm05gejniu25gokc5k9hm5pud.apps.googleusercontent.com",
+    "GLASSLY_GOOGLE_WEB_CLIENT_ID": ""
+  }
 }

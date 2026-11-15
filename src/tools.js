@@ -52,12 +52,39 @@ export async function plan(S, ctxMsgs, TZ) {
 
 // ---- İnternet araması
 export async function webSearch(query, n = 6) {
+  const errs = [];
+  try { const a = await exaSearch(query, n); if (a.length) return a; errs.push('exa: boş'); } catch (e) { errs.push('exa: ' + e.message); }
+  try { const b = await ddgSearch(query, n); if (b.length) return b; errs.push('ddg: boş'); } catch (e) { errs.push('ddg: ' + e.message); }
+  throw new Error(errs.join(' | '));
+}
+const decode = (s) => s.replace(/<[^>]+>/g, '').replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#x27;|&#39;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim();
+async function ddgSearch(query, n) {
+  const r = await fetch('https://html.duckduckgo.com/html/', {
+    method: 'POST', signal: AbortSignal.timeout(12000),
+    headers: { 'content-type': 'application/x-www-form-urlencoded', 'user-agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130 Safari/537.36', 'accept-language': 'tr-TR,tr;q=0.9' },
+    body: 'q=' + encodeURIComponent(query) + '&kl=tr-tr',
+  });
+  if (!r.ok) throw new Error('HTTP ' + r.status);
+  const html = await r.text();
+  const items = [];
+  const re = /<a[^>]+class="result__a"[^>]+href="([^"]+)"[^>]*>([\s\S]*?)<\/a>[\s\S]*?class="result__snippet"[^>]*>([\s\S]*?)<\/a>/g;
+  let m;
+  while ((m = re.exec(html)) && items.length < n) {
+    let url = m[1].replace(/&amp;/g, '&');
+    const u = url.match(/[?&]uddg=([^&]+)/); if (u) url = decodeURIComponent(u[1]);
+    if (url.startsWith('//')) url = 'https:' + url;
+    if (!/^https?:/.test(url) || /duckduckgo\.com\/y\.js/.test(url)) continue;
+    items.push({ title: decode(m[2]).slice(0, 200), url, date: '', text: decode(m[3]).slice(0, 1800) });
+  }
+  return items;
+}
+async function exaSearch(query, n) {
   const r = await fetch('https://mcp.exa.ai/mcp', {
     method: 'POST', signal: AbortSignal.timeout(15000),
     headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream' },
     body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'web_search_exa', arguments: { query, numResults: n } } }),
   });
-  if (!r.ok) throw new Error('arama HTTP ' + r.status);
+  if (!r.ok) throw new Error('HTTP ' + r.status);
   const raw = await r.text();
   let text = '';
   for (const line of raw.split('\n')) {

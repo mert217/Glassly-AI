@@ -300,7 +300,7 @@ async function webApi(request, p, ctx, { db, acc, S, env }) {
                 await send({ type: 'sources', items: ameta.sources });
                 notes.push(searchContext(pl.search, items, acc.TZ));
               }
-            } catch (e) { log('arama', e.message); notes.push('İnternet araması şu an yapılamadı. Bildiklerinle cevap ver ve bilginin güncel olmayabileceğini kısaca belirt.'); }
+            } catch (e) { log('arama', e.message); await send({ type: 'debug', text: String(e.message).slice(0, 300) }); notes.push('İnternet araması şu an yapılamadı. Bildiklerinle cevap ver ve bilginin güncel olmayabileceğini kısaca belirt.'); }
           }
           await send({ type: 'status', text: '' });
         }

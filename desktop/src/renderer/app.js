@@ -2128,7 +2128,7 @@ function authScreen(tab = acct.tab, keep = {}) {
       <p class="auth-err" id="authErr" role="alert" hidden></p>
       <button class="btn primary auth-submit" id="authSubmit" type="submit">${reg ? 'Hesap oluştur' : 'Giriş yap'}</button>
     </form>
-    <p class="auth-foot">${st.mode === 'bulut' ? 'Hesabın Glassly Bulut\'ta tutulur; her bilgisayardan aynı hesapla girersin.' : 'Hesabın bu bilgisayarda tutulur. Şifren açık hâliyle hiçbir yere kaydedilmez.'}${st.google ? ' Google ile devam edersen Gmail, Takvim ve Drive da aynı anda bağlanır.' : ''}</p>
+    <p class="auth-foot">${st.mode === 'bulut' ? 'Hesabın Glassly Bulut\'ta tutulur; her bilgisayardan aynı hesapla girersin.' : 'Hesabın bu bilgisayarda tutulur. Şifren açık hâliyle hiçbir yere kaydedilmez.'}${st.google ? ' Gmail, Takvim ve Drive\'ı sonra Ayarlar → Bağlantılar\'dan bağlayabilirsin.' : ''}</p>
   </div>`;
   el.hidden = false;
   document.body.classList.add('auth-open');

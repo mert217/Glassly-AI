@@ -2,6 +2,8 @@
 <html lang="tr" data-theme="frost">
 <head>
 <meta charset="utf-8" />
+<link rel="manifest" href="/manifest.webmanifest" />
+<meta name="theme-color" content="#eef1f8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Glassly — Camdan berrak yapay zeka asistanı</title>
 <meta name="description" content="Glassly; günlük işlerine, yazılarına, kodlarına ve e-postalarına yardım eden açık kaynak yapay zeka asistanı. Tarayıcıda hemen başla ya da masaüstü uygulamasını indir." />
@@ -48,7 +50,7 @@
   .card h3 { margin: 0 0 6px; font-size: 17px; letter-spacing: -.01em; }
   .card p { margin: 0; color: var(--text-2); font-size: 14.5px; }
 
-  .dl { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-top: 36px; }
+  .dl { display: grid; grid-template-columns: repeat(5, 1fr); gap: 14px; margin-top: 36px; }
   .dl a { display: flex; flex-direction: column; gap: 4px; padding: 20px; text-decoration: none; transition: transform .2s var(--ease), border-color .2s; }
   .dl a:hover { transform: translateY(-3px); border-color: var(--stroke-hi); }
   .dl a.me { border-color: color-mix(in srgb, var(--accent) 65%, transparent); box-shadow: var(--shadow), 0 0 0 4px color-mix(in srgb, var(--accent) 16%, transparent); }
@@ -68,7 +70,7 @@
 
   .reveal { opacity: 0; transform: translateY(18px); transition: opacity .7s var(--ease), transform .7s var(--ease); }
   .reveal.in { opacity: 1; transform: none; }
-  @media (max-width: 920px) { .grid { grid-template-columns: 1fr 1fr; } .dl { grid-template-columns: 1fr 1fr; } .band { grid-template-columns: 1fr; padding: 28px; } }
+  @media (max-width: 920px) { .grid { grid-template-columns: 1fr 1fr; } .dl { grid-template-columns: 1fr 1fr; } .dl a[data-os="android"] { grid-column: 1 / -1; } .band { grid-template-columns: 1fr; padding: 28px; } }
   @media (max-width: 620px) {
     .grid, .dl { grid-template-columns: 1fr; }
     header.nav nav a.link { display: none; }
@@ -163,6 +165,7 @@
         <a class="glass reveal" data-os="linux" href="https://github.com/mert217/Glassly-AI/releases/latest/download/Glassly.AppImage"><b>Linux</b><span>Tüm dağıtımlar</span><em class="tag">.AppImage</em></a>
         <a class="glass reveal" data-os="ubuntu" href="https://github.com/mert217/Glassly-AI/releases/latest/download/Glassly.deb"><b>Ubuntu / Debian</b><span>Paket olarak kur</span><em class="tag">.deb</em></a>
         <a class="glass reveal" data-os="mac" href="https://github.com/mert217/Glassly-AI/releases/latest/download/Glassly.dmg"><b>macOS</b><span>Apple Silicon ve Intel</span><em class="tag">.dmg</em></a>
+        <a class="glass reveal" data-os="android" href="https://github.com/mert217/Glassly-AI/releases/latest/download/Glassly.apk"><b>Android</b><span>Telefona özel uygulama</span><em class="tag">.apk</em></a>
       </div>
       <p class="note reveal">Ubuntu'da: <code>sudo apt install ./Glassly.deb</code> · AppImage için: <code>chmod +x Glassly.AppImage && ./Glassly.AppImage</code> · Tüm sürümler <a href="https://github.com/mert217/Glassly-AI/releases">GitHub sürümler sayfasında</a>.</p>
     </div>
@@ -186,11 +189,12 @@
   }));
   // İşletim sistemini tanı, uygun indirmeyi öne çıkar
   const ua = navigator.userAgent;
-  const os = /Windows/i.test(ua) ? 'windows' : /Android|iPhone|iPad/i.test(ua) ? '' : /Mac/i.test(ua) ? 'mac' : /Ubuntu|Debian/i.test(ua) ? 'ubuntu' : /Linux/i.test(ua) ? 'linux' : '';
-  const names = { windows: 'Windows için indir', mac: 'macOS için indir', ubuntu: 'Ubuntu için indir', linux: 'Linux için indir' };
+  const os = /Windows/i.test(ua) ? 'windows' : /Android/i.test(ua) ? 'android' : /iPhone|iPad/i.test(ua) ? '' : /Mac/i.test(ua) ? 'mac' : /Ubuntu|Debian/i.test(ua) ? 'ubuntu' : /Linux/i.test(ua) ? 'linux' : '';
+  const names = { windows: 'Windows için indir', mac: 'macOS için indir', ubuntu: 'Ubuntu için indir', linux: 'Linux için indir', android: 'Android için indir' };
   const pick = os && document.querySelector('.dl a[data-os="' + os + '"]');
   if (pick) {
     pick.classList.add('me');
+    if (os === 'android') pick.parentNode.prepend(pick);
     const h = document.getElementById('heroDl'); h.href = pick.href; h.querySelector('span').textContent = names[os];
   }
   // Oturum açıksa "Giriş yap" yerine "Uygulamaya git"

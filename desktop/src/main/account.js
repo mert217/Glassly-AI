@@ -203,13 +203,13 @@ class Accounts {
     return this.setSession(this.publicUser(u), { remember, mode: 'yerel' });
   }
 
-  // Google ile devam et: aynı girişte Gmail, Takvim ve Drive da bağlanır
+  // Google ile devam et: yalnızca ad ve e-posta istenir; Gmail, Takvim ve Drive Bağlantılar'dan bağlanır
   async google({ remember = false } = {}) {
     // Giriş ekranında hiçbir hesap açık değil: önceki kişinin erişimi kullanılmaz, Google her seferinde hesap sorar
     this.store.set('account', null);
     this.connections.setSecret('account-token', null);
     this.connections.forget();
-    try { await this.connections.connectGoogle(); } catch (e) { this.connections.forget(); throw e; }
+    try { await this.connections.connectGoogle({ basic: true }); } catch (e) { this.connections.forget(); throw e; }
     const g = this.connections.lastGoogle || {};
     const email = normEmail(g.email || this.connections.secret('google')?.email);
     if (!email) throw new Error('Google hesabının e-posta adresi alınamadı.');

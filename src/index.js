@@ -32,6 +32,7 @@ const DOWNLOADS = [
   { os: 'linux', label: 'Linux (AppImage)', file: 'Glassly.AppImage', url: DL('Glassly.AppImage') },
   { os: 'linux-deb', label: 'Ubuntu / Debian (.deb)', file: 'Glassly.deb', url: DL('Glassly.deb') },
   { os: 'mac', label: 'macOS', file: 'Glassly.dmg', url: DL('Glassly.dmg') },
+  { os: 'android', label: 'Android (APK)', file: 'Glassly.apk', url: DL('Glassly.apk') },
 ];
 
 const streaming = new Set(); // aynı anda kullanıcı başına tek yanıt

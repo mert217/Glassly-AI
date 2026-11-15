@@ -144,11 +144,13 @@ class Connections {
   }
 
   // ------------------------------------------------------------ Google OAuth (PKCE + yerel yönlendirme)
-  async connectGoogle({ hint = '' } = {}) {
+  async connectGoogle({ hint = '', basic = false } = {}) {
     const client = this.googleClient();
     if (!client) throw new Error('Google bağlantısı bu sürümde ayarlanmamış. Gelişmiş bölümünden istemci kimliği gir.');
     const prev = this.secret('google');
-    const want = new Set(['openid', 'email', 'profile', ...(GOOGLE_PROFILES[client.profile] || GOOGLE_PROFILES.tam)]);
+    // basic: yalnızca giriş (ad + e-posta). Gmail/Drive/Takvim izinleri Bağlantılar'dan ayrıca istenir;
+    // böylece girişte Google "doğrulanmamış uygulama" uyarısı çıkmaz.
+    const want = new Set(['openid', 'email', 'profile', ...(basic ? [] : (GOOGLE_PROFILES[client.profile] || GOOGLE_PROFILES.tam))]);
     const verifier = b64url(crypto.randomBytes(32));
     const challenge = b64url(crypto.createHash('sha256').update(verifier).digest());
     const st = b64url(crypto.randomBytes(12));
@@ -170,7 +172,7 @@ class Connections {
         const redirect = `http://127.0.0.1:${srv.address().port}/callback`;
         const q = new URLSearchParams({
           client_id: client.client_id, redirect_uri: redirect, response_type: 'code', scope: [...want].join(' '),
-          access_type: 'offline', prompt: 'select_account consent', include_granted_scopes: 'true', state: st,
+          ...(basic ? { prompt: 'select_account' } : { access_type: 'offline', prompt: 'select_account consent', include_granted_scopes: 'true' }), state: st,
           ...(hint ? { login_hint: hint } : {}),
           code_challenge: challenge, code_challenge_method: 'S256',
         });
@@ -193,6 +195,7 @@ class Connections {
     } catch { /* önemli değil */ }
     // Hesap girişi için (Google ile devam et) kısa süreli tutulur
     this.lastGoogle = { email, name, id_token: tok.id_token || '', access_token: tok.access_token };
+    if (basic) return this.status(); // giriş için alınan kısa süreli belirteç saklanmaz
     this.setSecret('google', { refresh_token: tok.refresh_token || prev?.refresh_token, scope: tok.scope || [...want].join(' '), email });
     this.access = { token: tok.access_token, exp: Date.now() + (tok.expires_in || 3600) * 1000 - 60e3 };
     return this.status();

@@ -1,0 +1,12 @@
+{
+  "appId": "biz.glassly.app",
+  "appName": "Glassly",
+  "webDir": "www",
+  "server": {
+    "url": "https://glassly.biz/app/",
+    "androidScheme": "https",
+    "allowNavigation": ["glassly.biz", "*.glassly.biz"],
+    "errorPath": "offline.html"
+  },
+  "android": { "backgroundColor": "#eef1f8", "allowMixedContent": false }
+}

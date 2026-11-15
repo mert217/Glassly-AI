@@ -73,7 +73,7 @@ function initGoogle() {
         catch (err) { $('#authErr').textContent = err.message; }
       },
     });
-    google.accounts.id.renderButton($('#gBtn'), { theme: document.documentElement.dataset.theme === 'frost' ? 'outline' : 'filled_black', size: 'large', shape: 'pill', text: 'continue_with', width: 300, locale: 'tr' });
+    google.accounts.id.renderButton($('#gBtn'), { theme: document.documentElement.dataset.theme === 'aurora' ? 'filled_black' : 'outline', size: 'large', shape: 'pill', text: 'continue_with', width: 300, locale: 'tr' });
     $('#gWrap').hidden = false;
   };
   document.head.append(s);

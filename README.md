@@ -13,7 +13,7 @@ Masaüstü uygulamasının kaynak kodu `desktop/` klasöründedir. Yeni bir sür
 ## Yayına alma (GitHub → Cloudflare)
 
 1. Cloudflare paneli → **Workers & Pages** → **Create application** → **Import a repository** → GitHub hesabını bağla → `Glassly-AI` deposunu seç.
-   - Project name: `glassly-bulut`
+   - Project name: `glassly-ai`
    - Build command: boş
    - Deploy command: `npx wrangler deploy`
    - **Create and deploy**'a bas.

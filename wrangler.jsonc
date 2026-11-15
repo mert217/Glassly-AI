@@ -1,6 +1,6 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "glassly-bulut",
+  "name": "glassly-ai",
   "main": "src/index.js",
   "compatibility_date": "2026-05-01",
   "compatibility_flags": ["nodejs_compat", "enable_request_signal"],

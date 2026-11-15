@@ -11,6 +11,12 @@ const on = (channel) => (cb) => {
 contextBridge.exposeInMainWorld('glassly', {
   platform: process.platform,
   api: (req) => ipcRenderer.invoke('api', req),
+  cloud: {
+    push: (sid, dir) => ipcRenderer.invoke('cloud:push', { sid, dir }),
+    list: () => ipcRenderer.invoke('cloud:list'),
+    get: (id) => ipcRenderer.invoke('cloud:get', id),
+    link: (sid, id) => ipcRenderer.invoke('cloud:link', { sid, id }),
+  },
   engine: {
     status: () => ipcRenderer.invoke('engine:status'),
     restart: () => ipcRenderer.invoke('engine:restart'),

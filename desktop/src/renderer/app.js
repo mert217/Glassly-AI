@@ -193,6 +193,8 @@ async function loadSessions() {
       .sort((a, b) => b.time.updated - a.time.updated);
   } catch { state.sessions = []; }
   renderSessions();
+  const uid = acct.status?.user?.id;
+  if (Date.now() - (state.cloudAt || 0) > 30e3 || state.cloudUid !== uid) { state.cloudAt = Date.now(); state.cloudUid = uid; loadCloudChats(); }
 }
 
 function renderSessions() {
@@ -213,7 +215,47 @@ function renderSessions() {
       <span class="acts"><button data-act="rename" title="Yeniden adlandır">${icon('edit', 14)}</button><button data-act="delete" title="Sil">${icon('trash', 14)}</button></span>
     </div>`;
   }
-  box.innerHTML = html;
+  box.innerHTML = html + cloudListHtml(q);
+}
+
+// Web ve telefonda başlayan sohbetler: tıklayınca masaüstünde devam edilir
+const isCloud = () => acct.status?.user?.mode === 'bulut';
+function cloudListHtml(q) {
+  if (!isCloud() || !state.cloudChats?.length) return '';
+  const list = state.cloudChats.filter((c) => !q || lower(c.title).includes(q));
+  if (!list.length) return '';
+  return `<div class="group-label">Web ve telefondan</div>` + list.map((c) => `<div class="session-item cloud" data-cloud="${esc(c.id)}" role="button" tabindex="0"><span class="t">${esc(c.title || 'Sohbet')}</span><span class="src">${c.src === 'telefon' ? 'telefon' : 'web'}</span></div>`).join('');
+}
+async function loadCloudChats() {
+  if (!isCloud()) { state.cloudChats = []; return; }
+  const r = await G.cloud.list().catch(() => null);
+  state.cloudChats = r?.chats || [];
+  renderSessions();
+}
+async function importCloud(id) {
+  const r = await G.cloud.get(id);
+  if (!r?.ok) return toast(r?.error || 'Sohbet alınamadı', 'err');
+  const c = r.chat.chat || r.chat;
+  const msgs = (r.chat.messages || c.messages || []).filter((m) => m.content);
+  try {
+    const s = await api('POST', '/session', { title: c.title || 'Sohbet' });
+    ownSession(s.id);
+    await G.cloud.link(s.id, c.id);
+    const prev = msgs.slice(-40).map((m) => ({ role: m.role, content: String(m.content).slice(0, 6000) }));
+    state.cfg.cloudPrev = { ...(state.cfg.cloudPrev || {}), [s.id]: prev };
+    G.store.set('cloudPrev', state.cfg.cloudPrev);
+    const transcript = prev.map((m) => (m.role === 'user' ? 'Kullanıcı' : 'Sen') + ': ' + m.content).join('\n\n').slice(-60000);
+    if (transcript) await api('POST', `/session/${s.id}/message`, { noReply: true, parts: [{ type: 'text', synthetic: true, text: 'Bu sohbet, kullanıcının başka cihazında seninle yaptığı konuşmanın devamı. Önceki konuşma:\n\n' + transcript + '\n\nBundan sonra bu bağlamla devam et; bu notu kullanıcıya söyleme.' }] });
+    state.cloudChats = state.cloudChats.filter((x) => x.id !== c.id);
+    state.sessions.unshift(s);
+    await openSession(s.id, true);
+  } catch (e) { toast(e.message, 'err'); }
+}
+function cloudPrevItem(sid) {
+  const prev = state.cfg.cloudPrev?.[sid];
+  if (!prev?.length) return null;
+  const body = prev.map((m) => `<div class="cp-msg ${m.role}"><b>${m.role === 'user' ? 'Sen' : 'Glassly'}</b>${Markdown.render(m.content)}</div>`).join('');
+  return { key: 'cloudprev', html: `<details class="cloud-prev glass"><summary>Bu sohbet başka cihazda başladı · önceki ${prev.length} mesajı gör</summary><div class="cp-body">${body}</div></details>` };
 }
 
 const cleanTitle = (t) => (!t || /^New session - /.test(t) ? 'Yeni sohbet' : t);
@@ -495,6 +537,7 @@ function renderThread() {
   if (fresh) { box.innerHTML = ''; box.dataset.sid = state.current; }
   const d = sessionData(state.current);
   const items = [];
+  const cp = cloudPrevItem(state.current); if (cp) items.push(cp);
   let prev = null;
   for (const id of d.order) {
     const m = d.msgs.get(id);
@@ -1412,6 +1455,8 @@ function bind() {
   };
 
   $('#sessionList').onclick = async (e) => {
+    const cl = e.target.closest('[data-cloud]');
+    if (cl) return importCloud(cl.dataset.cloud);
     const item = e.target.closest('.session-item');
     if (!item) return;
     const act = e.target.closest('[data-act]')?.dataset.act;
@@ -1434,7 +1479,7 @@ function bind() {
     } else openSession(id);
   };
 
-  $('#sessionList').onkeydown = (e) => { if (e.key === 'Enter' && e.target.matches('.session-item')) openSession(e.target.dataset.id); };
+  $('#sessionList').onkeydown = (e) => { if (e.key === 'Enter' && e.target.matches('.session-item')) { if (e.target.dataset.cloud) importCloud(e.target.dataset.cloud); else openSession(e.target.dataset.id); } };
   $('#recentProjects').onclick = (e) => { const b = e.target.closest('[data-project]'); if (b) setProject(b.dataset.project); };
   $('#ideas').onclick = (e) => { const b = e.target.closest('[data-prompt]'); if (b) { $('#input').value = b.dataset.prompt; autosize(); $('#input').focus(); } };
 
@@ -1770,6 +1815,7 @@ function lastAssistantText(sid) {
 }
 
 async function onSessionDone(sid) {
+  if (acct.status?.user?.mode === 'bulut') G.cloud.push(sid, curDir()).catch(() => {});
   if (state.taskSessions.has(sid)) {
     const title = state.taskSessions.get(sid);
     state.taskSessions.delete(sid);

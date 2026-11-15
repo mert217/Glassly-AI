@@ -146,7 +146,7 @@ function aiStreamToOpenAI(stream, model) {
     },
   }));
 }
-async function runWorkersAI(S, slot, body) {
+export async function runWorkersAI(S, slot, body) {
   const input = { messages: body.messages || [], stream: !!body.stream };
   for (const k of ['max_tokens', 'temperature', 'top_p']) if (body[k] != null) input[k] = body[k];
   const out = await S.ai.run(slot.model, input);

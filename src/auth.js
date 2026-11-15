@@ -43,9 +43,17 @@ let seeded = '';
 export function createAccounts(db, env) {
   // GLASSLY_DEVELOPER (gizli değişken): "eposta|pbkdf2$...". Bu hesap geliştiricidir, silinemez, sınırsızdır.
   const [devEmail, devHash] = String(env.GLASSLY_DEVELOPER || '').split('|').map((s) => s.trim());
-  const ADMINS = new Set([devEmail, ...String(env.GLASSLY_ADMINS || '').split(',')].map(normEmail).filter(Boolean));
-  const isAdmin = (u) => !!u && ADMINS.has(u.email);
-  const DAILY = Number(env.GLASSLY_DAILY_LIMIT ?? 70);
+  // GLASSLY_ADMINS: virgülle ayrılmış e-postalar. Bu hesaplar yalnızca Google ile doğrulanmışsa geliştirici sayılır.
+  const ADMINS = new Set(String(env.GLASSLY_ADMINS || '').split(',').map(normEmail).filter(Boolean));
+  const isAdmin = (u) => !!u && ((devEmail && devHash && u.email === normEmail(devEmail)) || (ADMINS.has(u.email) && String(u.provider).includes('google')));
+  const DAILY0 = Number(env.GLASSLY_DAILY_LIMIT ?? 70);
+  let DAILY = DAILY0; let dailyAt = 0;
+  async function loadDaily() {
+    if (Date.now() - dailyAt < 30e3) return DAILY;
+    const v = await db.setting('daily', null).catch(() => null);
+    DAILY = v == null ? DAILY0 : Number(v); dailyAt = Date.now();
+    return DAILY;
+  }
   const TZ = env.GLASSLY_TIMEZONE || 'Europe/Istanbul';
   const SESSION_DAYS = Number(env.GLASSLY_SESSION_DAYS || 90);
   const GOOGLE_IDS = new Set(String(env.GLASSLY_GOOGLE_CLIENT_IDS || '').split(',').map((s) => s.trim()).filter(Boolean));
@@ -58,7 +66,7 @@ export function createAccounts(db, env) {
     const mid = new Date(local); mid.setHours(24, 0, 0, 0);
     return now.getTime() + (mid - local);
   }
-  const publicUser = (u) => ({ id: u.id, name: u.name, email: u.email, provider: u.provider, created: u.created, role: isAdmin(u) ? 'gelistirici' : 'kullanici' });
+  const publicUser = (u) => ({ id: u.id, name: u.name, email: u.email, provider: u.provider, created: u.created, role: isAdmin(u) ? 'gelistirici' : 'kullanici', hasPassword: !!u.hash });
 
   async function seed() {
     if (seeded === devHash || !devEmail || !devHash) return;
@@ -85,6 +93,7 @@ export function createAccounts(db, env) {
   async function usedToday(u) { return (await db.one('SELECT n FROM usage WHERE uid = ? AND day = ?', u.id, today()))?.n || 0; }
   async function usageOf(u, used) {
     used ??= await usedToday(u);
+    await loadDaily();
     return isAdmin(u) || !DAILY ? { used, limit: null, left: null, unlimited: true, reset: resetAt() } : { used, limit: DAILY, left: Math.max(0, DAILY - used), unlimited: false, reset: resetAt() };
   }
   // Hak varsa bir mesaj düşer ve güncel durum döner; yoksa null
@@ -95,15 +104,33 @@ export function createAccounts(db, env) {
       ['INSERT INTO usage (uid, day, n) VALUES (?, ?, 1) ON CONFLICT(uid, day) DO UPDATE SET n = n + 1', u.id, today()],
       ['UPDATE users SET requests = requests + 1, last_seen = ? WHERE id = ?', Date.now(), u.id],
       ['DELETE FROM usage WHERE day < ?', new Date(Date.now() - 3 * 864e5).toISOString().slice(0, 10)],
+      ["INSERT INTO daily (day, kind, n) VALUES (?, 'msg', 1) ON CONFLICT(day, kind) DO UPDATE SET n = n + 1", today()],
     ]);
     return usageOf(u, q.used + 1);
   }
+  // Ek kotalar (görsel oluşturma vb.): hak varsa düşer ve true döner
+  async function consumeExtra(u, kind, max) {
+    const d = today();
+    if (!isAdmin(u)) {
+      const n = (await db.one('SELECT n FROM extra WHERE uid = ? AND day = ? AND kind = ?', u.id, d, kind))?.n || 0;
+      if (n >= max) return false;
+    }
+    await db.batch([
+      ['INSERT INTO extra (uid, day, kind, n) VALUES (?, ?, ?, 1) ON CONFLICT(uid, day, kind) DO UPDATE SET n = n + 1', u.id, d, kind],
+      ['INSERT INTO daily (day, kind, n) VALUES (?, ?, 1) ON CONFLICT(day, kind) DO UPDATE SET n = n + 1', d, kind],
+      ['DELETE FROM extra WHERE day < ?', new Date(Date.now() - 3 * 864e5).toISOString().slice(0, 10)],
+    ]);
+    return true;
+  }
   async function refund(u) { await db.run('UPDATE usage SET n = MAX(0, n - 1) WHERE uid = ? AND day = ?', u.id, today()); }
-  const limitMsg = () => `Bugünkü ${DAILY} mesaj hakkın doldu. Gece yarısı yenilenir.`;
+  const limitMsg = () => DAILY <= 0 ? 'Mesaj hakkın doldu.' : `Bugünkü ${DAILY} mesaj hakkın doldu. Gece yarısı yenilenir.`;
   const registrationOpen = async () => (await db.setting('registration', String(env.GLASSLY_REGISTRATION ?? 'true') !== 'false')) !== false;
 
   async function deleteUser(id) {
     await db.batch([
+      ['DELETE FROM images WHERE uid = ?', id],
+      ['DELETE FROM reminders WHERE uid = ?', id],
+      ['DELETE FROM extra WHERE uid = ?', id],
       ['DELETE FROM messages WHERE chat_id IN (SELECT id FROM chats WHERE uid = ?)', id],
       ['DELETE FROM chats WHERE uid = ?', id],
       ['DELETE FROM usage WHERE uid = ?', id],
@@ -117,7 +144,7 @@ export function createAccounts(db, env) {
     const route = p.replace(/^\/(v1\/)?auth/, '');
     const b = request.method === 'GET' ? {} : await readJSON(request);
     await seed();
-    if ((['/register', '/login', '/google', '/password'].includes(route) || (route === '/me' && request.method === 'DELETE')) && authHits.hit(ip)) {
+    if ((['/register', '/login', '/google', '/password'].includes(route) || route === '/exchange' || (route === '/me' && request.method === 'DELETE')) && authHits.hit(ip)) {
       return fail(429, 'Çok fazla deneme yaptın. Bir dakika bekleyip tekrar dene.', 'rate_limit');
     }
     if (request.method === 'POST' && route === '/register') {
@@ -153,10 +180,31 @@ export function createAccounts(db, env) {
         u = { id: crypto.randomUUID(), name: cleanName(info.name) || email.split('@')[0], email, hash: '', provider: 'google', created: Date.now() };
         await db.run('INSERT INTO users (id, email, name, hash, provider, created) VALUES (?, ?, ?, ?, ?, ?)', u.id, u.email, u.name, '', 'google', u.created);
       } else if (!u.provider.includes('google')) {
-        u.provider = u.hash ? 'sifre+google' : 'google';
-        await db.run('UPDATE users SET provider = ? WHERE id = ?', u.provider, u.id);
+        // Bu e-postanın gerçek sahibi Google ile doğrulandı. Hesap daha önce başkası tarafından şifreyle
+        // açılmış olabileceği için o şifre ve açık oturumlar geçersiz kılınır (geliştirici hesabı hariç).
+        if (u.dev_seed) u.provider = 'sifre+google';
+        else { u.provider = 'google'; u.hash = ''; await db.run('DELETE FROM sessions WHERE uid = ?', u.id); }
+        await db.run('UPDATE users SET provider = ?, hash = ? WHERE id = ?', u.provider, u.hash, u.id);
       }
-      return json(200, await newSession(u));
+      const s = await newSession(u);
+      // Telefon uygulaması: belirteç doğrudan verilmez, tek kullanımlık kodla ve doğrulayıcıyla alınır
+      if (b.challenge) {
+        const ch = String(b.challenge).slice(0, 100);
+        const code = b64url(crypto.getRandomValues(new Uint8Array(24)));
+        await db.batch([['DELETE FROM codes WHERE exp < ?', Date.now()], ['INSERT INTO codes (c, token, ch, exp) VALUES (?, ?, ?, ?)', code, s.token, ch, Date.now() + 5 * 60e3]]);
+        return json(200, { code });
+      }
+      return json(200, s);
+    }
+    if (request.method === 'POST' && route === '/exchange') {
+      const row = await db.one('SELECT * FROM codes WHERE c = ? AND exp > ?', String(b.code || ''), Date.now());
+      if (!row) return fail(401, 'Giriş kodunun süresi doldu. Tekrar dene.', 'auth');
+      const ch = b64url(await crypto.subtle.digest('SHA-256', enc.encode(String(b.verifier || ''))));
+      if (ch !== row.ch) return fail(401, 'Giriş doğrulanamadı.', 'auth');
+      await db.run('DELETE FROM codes WHERE c = ?', row.c);
+      const u = await db.one('SELECT u.* FROM sessions s JOIN users u ON u.id = s.uid WHERE s.h = ?', await sha(row.token));
+      if (!u) return fail(401, 'Giriş doğrulanamadı.', 'auth');
+      return json(200, { token: row.token, user: publicUser(u) });
     }
     const me = await userOf(request);
     if (!me) return fail(401, 'Oturumun sona ermiş. Tekrar giriş yap.', 'auth');
@@ -204,6 +252,7 @@ export function createAccounts(db, env) {
       const rows = await db.all(`SELECT u.*, (SELECT COUNT(*) FROM sessions s WHERE s.uid = u.id AND s.exp > ?) AS sessions,
         (SELECT n FROM usage g WHERE g.uid = u.id AND g.day = ?) AS today, (SELECT COUNT(*) FROM chats c WHERE c.uid = u.id) AS chats
         FROM users u ORDER BY u.created DESC LIMIT 1000`, now, today());
+      await loadDaily();
       return json(200, { users: rows.map((u) => ({ ...publicUser(u), sessions: u.sessions, requests: u.requests, lastSeen: u.last_seen, today: u.today || 0, chats: u.chats, limit: isAdmin(u) || !DAILY ? null : DAILY })) });
     }
     const m = route.match(/^\/users\/([\w-]+)$/);
@@ -216,12 +265,16 @@ export function createAccounts(db, env) {
     }
     if (request.method === 'GET' && route === '/stats') {
       const now = Date.now();
-      const [users, sessions, msgs] = await Promise.all([
+      const since = new Intl.DateTimeFormat('sv-SE', { timeZone: TZ }).format(new Date(now - 13 * 864e5));
+      const [users, sessions, msgs, days, newUsers] = await Promise.all([
         db.one('SELECT COUNT(*) AS n FROM users'), db.one('SELECT COUNT(*) AS n FROM sessions WHERE exp > ?', now),
         db.one('SELECT COALESCE(SUM(n), 0) AS n FROM usage WHERE day = ?', today()),
+        db.all('SELECT day, kind, n FROM daily WHERE day >= ? ORDER BY day', since),
+        db.one('SELECT COUNT(*) AS n FROM users WHERE created > ?', now - 7 * 864e5),
       ]);
+      await loadDaily();
       return json(200, {
-        users: users.n, sessions: sessions.n, messagesToday: msgs.n, registration: await registrationOpen(), dailyMessages: DAILY || null,
+        users: users.n, sessions: sessions.n, messagesToday: msgs.n, newUsers7: newUsers.n, days, registration: await registrationOpen(), dailyMessages: DAILY || null, dailyDefault: DAILY0,
         slots: pool.slots.length, ready: pool.slots.filter((s) => s.coolUntil <= now).length,
         cooling: pool.slots.filter((s) => s.coolUntil > now).slice(0, 30).map((s) => ({ id: `${s.upstream}/${s.model}`, until: s.coolUntil })),
         models: [...new Set(pool.slots.map((s) => `${s.upstream}/${s.model}`))],
@@ -230,10 +283,16 @@ export function createAccounts(db, env) {
     if (request.method === 'POST' && route === '/settings') {
       const b = await readJSON(request);
       if (typeof b.registration === 'boolean') await db.setSetting('registration', b.registration);
-      return json(200, { ok: true, registration: await registrationOpen() });
+      if (b.daily !== undefined) {
+        const n = Math.round(Number(b.daily));
+        if (!(n >= 0 && n <= 100000)) return fail(400, 'Günlük sınır 0 ile 100000 arasında olmalı (0 = sınırsız).');
+        await db.setSetting('daily', n); dailyAt = 0;
+      }
+      await loadDaily();
+      return json(200, { ok: true, registration: await registrationOpen(), dailyMessages: DAILY || null });
     }
     return fail(404, 'Bulunamadı');
   }
 
-  return { auth, admin, userOf, consume, refund, usageOf, limitMsg, isAdmin, registrationOpen, today, TZ, DAILY };
+  return { auth, admin, userOf, consume, consumeExtra, refund, usageOf, limitMsg, isAdmin, registrationOpen, today, TZ, loadDaily, get DAILY() { return DAILY; } };
 }

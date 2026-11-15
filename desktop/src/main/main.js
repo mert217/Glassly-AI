@@ -63,6 +63,12 @@ engine.accountKey = () => (accounts.current()?.mode === 'bulut' ? accounts.token
 engine.userName = () => accounts.current()?.name || '';
 engine.isCreator = () => { const u = accounts.current(); return !!u && (u.role === 'gelistirici' || String(u.email || '').toLowerCase() === 'ahmetmertevci@gmail.com'); };
 connections.scope = () => accounts.current()?.id || null;
+const { CloudSync } = require('./cloudsync');
+const cloud = new CloudSync({
+  store, engine, accounts,
+  notify: (title, body) => { if (!Notification.isSupported()) return; const n = new Notification({ title, body: String(body || '').slice(0, 200), icon: appIcon() }); n.on('click', () => showWindow()); n.show(); },
+});
+cloud.start();
 assistant.scope = () => accounts.current()?.id || null;
 
 let win = null;
@@ -178,6 +184,10 @@ const accountDo = (fn) => async (_e, arg) => {
 };
 const googleLogin = (a) => accounts.google(a);
 ipcMain.handle('account:status', () => accounts.status());
+ipcMain.handle('cloud:push', (_e, { sid, dir }) => cloud.push(sid, dir).catch((e) => ({ ok: false, error: e.message })));
+ipcMain.handle('cloud:list', async () => { try { return { ok: true, chats: await cloud.list() }; } catch (e) { return { ok: false, error: e.message, chats: [] }; } });
+ipcMain.handle('cloud:get', async (_e, id) => { try { return { ok: true, chat: await cloud.get(id) }; } catch (e) { return { ok: false, error: e.message }; } });
+ipcMain.handle('cloud:link', (_e, { sid, id }) => { cloud.link(sid, id); return true; });
 ipcMain.handle('account:register', accountDo((a) => accounts.register(a)));
 ipcMain.handle('account:login', accountDo((a) => accounts.login(a)));
 ipcMain.handle('account:google', accountDo(googleLogin));

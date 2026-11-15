@@ -36,7 +36,9 @@
       <p class="err" id="authErr" role="alert"></p>
       <button class="btn primary lg" id="authBtn" type="submit">Giriş yap</button>
     </form>
-    <div id="gWrap" hidden><div class="or"><span>ya da</span></div><div id="gBtn"></div></div>
+    <div id="gWrap" hidden><div class="or"><span>ya da</span></div><div id="gBtn"></div>
+      <button type="button" class="btn lg gnative" id="gNative" hidden><svg viewBox="0 0 48 48" class="g"><path fill="#FFC107" stroke="none" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z"/><path fill="#FF3D00" stroke="none" d="m6.3 14.7 6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" stroke="none" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-8l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" stroke="none" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.4-.4-3.5z"/></svg>Google ile devam et</button>
+    </div>
     <p class="fine" id="regClosed" hidden>Yeni kayıt şu an kapalı.</p>
   </div>
 </div>
@@ -49,7 +51,9 @@
       <button class="icon only-mobile" id="closeSide" aria-label="Menüyü kapat"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
     </div>
     <button class="btn new" id="newChat"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>Yeni sohbet</button>
-    <div class="list-h">Sohbetler</div>
+    <div class="sbox"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><input id="chatSearch" type="search" placeholder="Sohbetlerde ara" aria-label="Sohbetlerde ara" /></div>
+    <div class="appnote glass" id="appNote" hidden><b>Uygulamanın yeni sürümü hazır</b><small>Google girişi, bildirimler ve sesli okuma için güncelle.</small><a class="btn sm primary" id="appNoteBtn" href="https://github.com/mert217/Glassly-AI/releases/latest/download/Glassly.apk" target="_blank" rel="noopener">İndir ve kur</a></div>
+    <div class="list-h" id="listH">Sohbetler</div>
     <nav id="chats" class="chats" aria-label="Sohbetler"></nav>
     <div class="side-bottom">
       <div class="usage" id="usage" hidden>
@@ -64,6 +68,7 @@
       </button>
       <div class="menu glass" id="meMenu" role="menu" hidden>
         <button role="menuitem" data-open-settings="account">Ayarlar</button>
+        <button role="menuitem" data-open-settings="rem">Hatırlatıcılar</button>
         <button role="menuitem" data-open-settings="dev" id="menuDev" hidden>Geliştirici paneli</button>
         <button role="menuitem" id="logout">Çıkış yap</button>
       </div>
@@ -89,9 +94,16 @@
     </div>
 
     <form class="composer glass" id="composer">
-      <textarea id="input" rows="1" placeholder="Glassly'ye bir şey sor…" aria-label="Mesaj"></textarea>
-      <button class="send" id="send" type="submit" aria-label="Gönder"><svg viewBox="0 0 24 24"><path d="M12 19V5M5 12l7-7 7 7"/></svg></button>
+      <div class="att" id="att" hidden></div>
+      <div class="crow">
+        <button type="button" class="icon cbtn" id="attach" aria-label="Dosya ya da fotoğraf ekle" title="Dosya ya da fotoğraf ekle"><svg viewBox="0 0 24 24"><path d="m21 11-8.6 8.6a5.5 5.5 0 0 1-7.8-7.8l9.2-9.2a3.7 3.7 0 0 1 5.2 5.2l-9.2 9.2a1.8 1.8 0 0 1-2.6-2.6L15.6 6"/></svg></button>
+        <input type="file" id="fileIn" multiple hidden accept="image/*,.pdf,.docx,.txt,.md,.csv,.json,.xml,.html,.css,.js,.ts,.py,.java,.c,.cpp,.cs,.go,.rs,.php,.rb,.sql,.yaml,.yml,.log,.ini,.sh" />
+        <textarea id="input" rows="1" placeholder="Glassly'ye bir şey sor…" aria-label="Mesaj"></textarea>
+        <button type="button" class="icon cbtn" id="mic" aria-label="Sesle yaz" title="Sesle yaz"><svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></button>
+        <button class="send" id="send" type="submit" aria-label="Gönder"><svg viewBox="0 0 24 24"><path d="M12 19V5M5 12l7-7 7 7"/></svg></button>
+      </div>
     </form>
+    <div class="drop" id="drop" hidden><div>Bırak, ekleyeyim</div></div>
     <p class="hint">Glassly hata yapabilir. Önemli bilgileri kontrol et.</p>
   </main>
 </div>
@@ -102,7 +114,8 @@
     <header><h3 id="setTitle">Ayarlar</h3><button class="icon" data-close aria-label="Kapat"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></button></header>
     <div class="tabs" role="tablist">
       <button role="tab" data-tab="account">Hesap</button>
-      <button role="tab" data-tab="look">Görünüm</button>
+      <button role="tab" data-tab="look">Görünüm ve ses</button>
+      <button role="tab" data-tab="rem">Hatırlatıcılar</button>
       <button role="tab" data-tab="dev" id="tabDev" hidden>Geliştirici</button>
     </div>
     <div class="panes">
@@ -111,7 +124,8 @@
         <div class="f"><label class="lbl">E-posta</label><div class="ro" id="sEmail"></div></div>
         <div class="f"><label class="lbl">Bugünkü kullanım</label><div class="ro" id="sUsage"></div></div>
         <h4>Şifre</h4>
-        <div class="grid2">
+        <p class="muted small" id="pNote" hidden>Google ile giriş yapıyorsun. İstersen e-posta ve şifreyle de girebilmek için bir şifre belirle.</p>
+        <div class="grid2" id="pGrid">
           <input class="field" id="pCur" type="password" placeholder="Mevcut şifre" autocomplete="current-password" />
           <input class="field" id="pNew" type="password" placeholder="Yeni şifre (en az 8)" autocomplete="new-password" />
         </div>
@@ -121,7 +135,7 @@
         <div id="delWrap">
           <h4>Hesabı sil</h4>
           <p class="muted small">Hesabın ve tüm sohbetlerin kalıcı olarak silinir.</p>
-          <div class="row"><input class="field" id="delPass" type="password" placeholder="Şifren" autocomplete="current-password" /><button class="btn danger" id="delAcct">Hesabı sil</button></div>
+ <div class="row"><input class="field" id="delPass" type="password" placeholder="Şifren" autocomplete="current-password" /><button class="btn danger" id="delAcct">Hesabı sil</button></div>
         </div>
       </section>
       <section data-pane="look">
@@ -129,9 +143,26 @@
           <button class="theme" data-theme-pick="aurora"><span class="sw sw-a"></span><b>Aurora</b><small>Karanlık, renkli</small></button>
           <button class="theme" data-theme-pick="frost"><span class="sw sw-f"></span><b>Frost</b><small>Aydınlık, buzlu</small></button>
         </div>
+        <h4>Ses</h4>
+        <div class="toggle-row">
+          <div><b>Sesli sohbet</b><small class="muted">Mikrofonla konuştuğunda mesaj kendiliğinden gönderilir ve cevap sesli okunur.</small></div>
+          <label class="switch"><input type="checkbox" id="voiceMode" /><i></i></label>
+        </div>
+      </section>
+      <section data-pane="rem">
+        <p class="muted small">Sohbette "yarın 9'da faturayı hatırlat" gibi yazman yeter. Zamanı gelince telefonuna ve açık tarayıcına bildirim gelir.</p>
+        <div class="row remadd"><input class="field" id="remText" placeholder="Ne hatırlatayım?" maxlength="300" /><input class="field" id="remAt" type="datetime-local" /><button class="btn" id="remAdd">Ekle</button></div>
+        <button class="btn sm" id="notifPerm" hidden>Bildirimlere izin ver</button>
+        <div class="rems" id="rems"></div>
       </section>
       <section data-pane="dev">
         <div class="stats" id="devStats"></div>
+        <div class="chart" id="devChart"></div>
+        <div class="toggle-row">
+          <div><b>Günlük mesaj sınırı</b><small class="muted">Geliştirici hesabı hariç herkes için. 0 yazarsan sınır kalkar.</small></div>
+          <div class="row lim"><input class="field" id="devLimit" type="number" min="0" max="100000" inputmode="numeric" /><button class="btn sm" id="devLimitSave">Kaydet</button></div>
+        </div>
+        <div style="height:8px"></div>
         <div class="toggle-row">
           <div><b>Yeni kayıtlar</b><small class="muted">Kapalıyken yalnızca mevcut hesaplar giriş yapabilir.</small></div>
           <label class="switch"><input type="checkbox" id="devReg" /><i></i></label>

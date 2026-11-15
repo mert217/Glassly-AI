@@ -21,6 +21,8 @@
   "workers_dev": true,
   "vars": {
     "GLASSLY_DAILY_LIMIT": "70",
+    "GLASSLY_ADMINS": "ahmetmertevci@gmail.com",
+    "GLASSLY_IMAGE_LIMIT": "15",
     "GLASSLY_TIMEZONE": "Europe/Istanbul",
     "GLASSLY_GOOGLE_CLIENT_IDS": "95721514458-rjd8iqovm05gejniu25gokc5k9hm5pud.apps.googleusercontent.com",
     "GLASSLY_GOOGLE_WEB_CLIENT_ID": ""

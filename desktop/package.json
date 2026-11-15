@@ -1,7 +1,7 @@
 {
   "name": "glassly",
   "productName": "Glassly",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "Glassly yapay zekâ asistanı",
   "main": "src/main/main.js",
   "author": {

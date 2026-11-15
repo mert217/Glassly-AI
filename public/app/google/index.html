@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="tr" data-theme="frost">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Glassly · Google ile giriş</title>
+<link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+<link rel="stylesheet" href="/assets/glass.css" />
+<style>
+  html, body { height: 100%; } body { display: grid; place-items: center; padding: 20px; }
+  .box { width: min(400px, 100%); padding: 32px 26px; text-align: center; }
+  .box img.l { width: 52px; height: 52px; } h1 { font-size: 22px; margin: 16px 0 6px; } p { margin: 0 0 22px; }
+  #g { display: flex; justify-content: center; min-height: 44px; } .err { color: var(--err); font-size: 14px; min-height: 20px; margin-top: 14px; }
+  #back { width: 100%; justify-content: center; margin-top: 8px; }
+</style>
+</head>
+<body>
+<div class="aurora" aria-hidden="true"><i></i><i></i><i></i></div>
+<div class="box glass">
+  <img class="l" src="/assets/logo.svg" alt="" />
+  <h1 id="h">Google ile giriş</h1>
+  <p class="muted" id="sub">Hesabını seç, ardından Glassly uygulamasına döneceksin.</p>
+  <div id="g"></div>
+  <a class="btn primary lg" id="back" hidden>Glassly'ye dön</a>
+  <p class="err" id="err"></p>
+</div>
+<script>
+(async () => {
+  const ch = new URLSearchParams(location.search).get('ch') || '';
+  const err = (m) => (document.getElementById('err').textContent = m);
+  if (!/^[\w-]{40,60}$/.test(ch)) return err('Bu sayfayı Glassly uygulamasından aç.');
+  const cfg = await (await fetch('/api/config')).json().catch(() => ({}));
+  if (!cfg.googleClientId) return err('Google girişi şu an kapalı.');
+  const s = document.createElement('script'); s.src = 'https://accounts.google.com/gsi/client'; s.async = true;
+  s.onload = () => {
+    google.accounts.id.initialize({
+      client_id: cfg.googleClientId, ux_mode: 'popup', auto_select: false,
+      callback: async ({ credential }) => {
+        err('');
+        try {
+          const r = await fetch('/auth/google', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id_token: credential, challenge: ch }) });
+          const j = await r.json();
+          if (!r.ok || !j.code) throw new Error(j.error?.message || 'Giriş yapılamadı.');
+          const url = `intent://auth?code=${j.code}#Intent;scheme=biz.glassly.app;package=biz.glassly.app;end`;
+          const back = document.getElementById('back'); back.href = url; back.hidden = false;
+          document.getElementById('g').hidden = true;
+          document.getElementById('h').textContent = 'Giriş tamam';
+          document.getElementById('sub').textContent = 'Uygulama açılmazsa aşağıdaki düğmeye bas.';
+          location.href = url;
+        } catch (e) { err(e.message); }
+      },
+    });
+    google.accounts.id.renderButton(document.getElementById('g'), { theme: 'outline', size: 'large', shape: 'pill', text: 'continue_with', width: 300, locale: 'tr' });
+  };
+  document.head.append(s);
+})();
+</script>
+</body>
+</html>

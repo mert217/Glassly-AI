@@ -744,3 +744,12 @@ body.auth-open .app { filter: blur(2px); }
 .upd-prog { height: 6px; border-radius: 999px; background: color-mix(in srgb, var(--text) 10%, transparent); overflow: hidden; margin: 6px 0 10px; }
 .upd-prog i { display: block; height: 100%; background: linear-gradient(90deg, var(--accent-1), var(--accent-2)); transition: width .25s var(--ease); }
 #updRow .row .l { flex: 1; min-width: 0; }
+
+/* Web ve telefondan gelen sohbetler */
+.session-item.cloud .src { margin-left: auto; font-size: 11px; opacity: .6; padding: 1px 7px; border-radius: 99px; border: 1px solid var(--line, rgba(255,255,255,.15)); }
+.cloud-prev { margin: 4px 0 18px; border-radius: 14px; padding: 10px 14px; font-size: 13.5px; }
+.cloud-prev summary { cursor: pointer; opacity: .75; list-style: none; }
+.cloud-prev summary::-webkit-details-marker { display: none; }
+.cloud-prev .cp-body { margin-top: 10px; display: grid; gap: 10px; max-height: 360px; overflow-y: auto; }
+.cloud-prev .cp-msg b { display: block; font-size: 12px; opacity: .65; margin-bottom: 2px; }
+.cloud-prev .cp-msg > :last-child { margin-bottom: 0; }

@@ -35,6 +35,7 @@ jobs:
           npx cap add android
           npx capacitor-assets generate --android --iconBackgroundColor '#0b0b24' --splashBackgroundColor '#eef1f8'
           npx cap sync android
+          node patch-manifest.js
       - name: Sürüm numarası
         run: |
           TAG="${{ github.event.inputs.tag || github.ref_name }}"; V="${TAG#v}"

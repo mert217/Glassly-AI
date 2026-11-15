@@ -1100,18 +1100,74 @@ async function showTab(tab) {
     const log = await G.engine.log();
     body.innerHTML = `${close}<h3>Motor</h3><p class="sub">Glassly, açık kaynak <b>opencode</b> motorunu kendi izole klasöründe çalıştırır; bilgisayarındaki diğer opencode kurulumlarına dokunmaz.</p>
       <div class="row"><div class="l"><b>Durum</b><span>${esc(state.engine.message || state.engine.state)}</span></div><button class="btn sm ghost" id="engRestart">${icon('refresh', 14)}Yeniden başlat</button></div>
-      <div class="row"><div class="l"><b>Sürüm</b><span>opencode ${esc(info.version || 'sistem kurulumu')}</span></div><button class="btn sm ghost" id="engUpdate">Güncellemeleri denetle</button></div>
+      <div class="row"><div class="l"><b>Sürüm</b><span>opencode ${esc(info.version || 'sistem kurulumu')}</span></div><button class="btn sm ghost" id="engUpdate">Motoru güncelle</button></div>
       <div class="row"><div class="l"><b>Adres</b><span>${esc(info.url || '—')}</span></div></div>
       <h3 style="margin:18px 0 8px;font-size:14px">Günlük</h3><pre class="log">${esc(log || 'Boş')}</pre>`;
   } else if (tab === 'about') {
     const a = await G.appInfo();
-    body.innerHTML = `${close}<div style="text-align:center;padding:30px 0"><svg width="72" height="72"><use href="#logo"/></svg>
+    body.innerHTML = `${close}<div style="text-align:center;padding:30px 0 18px"><svg width="72" height="72"><use href="#logo"/></svg>
       <h3 style="font-size:30px;margin:12px 0 4px;letter-spacing:-.03em">Glassly</h3><p class="sub">Sürüm ${esc(a.version)} · ${esc(a.platform)}</p>
-      <p style="max-width:44ch;margin:0 auto 18px;color:var(--text-2)">Cam gibi berrak, açık kaynak masaüstü AI kod asistanı. Ahmet tarafından yapıldı.</p>
-      <button class="btn sm ghost" data-open="https://opencode.ai">opencode.ai</button>
-      <button class="btn sm ghost" data-open="https://github.com/anomalyco/opencode">opencode (MIT)</button></div>`;
+      <p style="max-width:44ch;margin:0 auto;color:var(--text-2)">Cam gibi berrak yapay zekâ asistanı. Ahmet Mert Evci tarafından yapıldı.</p></div>
+      <h3 style="margin:8px 0 8px;font-size:14px">Güncellemeler</h3><div id="updRow"></div>
+      <div style="text-align:center;margin-top:18px"><button class="btn sm ghost" data-open="https://glassly.biz">glassly.biz</button></div>`;
+    renderUpdateRow();
   }
 }
+
+// ---------------------------------------------------------------- güncelleme
+const mb = (n) => (n ? (n / 1048576).toFixed(1).replace('.', ',') + ' MB' : '');
+function updText(u) {
+  switch (u.status) {
+    case 'checking': return 'Güncellemeler denetleniyor…';
+    case 'latest': return `Glassly güncel (sürüm ${esc(u.current)}).`;
+    case 'available': return `Yeni sürüm hazır: <b>${esc(u.latest)}</b>${u.size ? ' · ' + mb(u.size) : ''}`;
+    case 'downloading': return `İndiriliyor… %${u.progress || 0}`;
+    case 'ready': return u.hint ? esc(u.hint) : `Sürüm ${esc(u.latest)} indirildi, kurmaya hazır.`;
+    case 'installing': return u.type === 'deb' ? 'Kuruluyor… Şifre sorulursa bilgisayarının şifresini yaz.' : 'Kuruluyor…';
+    case 'error': return esc(u.error || 'Bir sorun oldu.');
+    default: return `Şu anki sürüm ${esc(u.current)}.`;
+  }
+}
+function updButtons(u) {
+  if (u.status === 'checking' || u.status === 'installing') return '<button class="btn sm ghost" disabled><span class="spin"></span>Bekle</button>';
+  if (u.status === 'available') return '<button class="btn sm primary" data-upd="download">İndir ve kur</button>';
+  if (u.status === 'downloading') return '<button class="btn sm ghost" data-upd="cancel">Vazgeç</button>';
+  if (u.status === 'ready') return '<button class="btn sm primary" data-upd="install">Kur ve yeniden başlat</button>';
+  return '<button class="btn sm ghost" data-upd="check">Güncellemeleri denetle</button>';
+}
+const updBar = (u) => (u.status === 'downloading' ? `<div class="upd-prog"><i style="width:${u.progress || 0}%"></i></div>` : '');
+async function renderUpdateRow(u) {
+  const el = $('#updRow');
+  if (!el) return;
+  u = u || state.update || (state.update = await G.update.status());
+  el.innerHTML = `<div class="row"><div class="l"><b>Glassly sürümü</b><span>${updText(u)}</span>${updBar(u)}</div>${updButtons(u)}</div>`;
+}
+function renderUpdateCard(u) {
+  let card = $('#updCard');
+  const show = ['available', 'downloading', 'ready', 'installing'].includes(u.status) && state.updDismissed !== u.latest;
+  if (!show) { if (card) card.remove(); return; }
+  if (!card) { card = document.createElement('div'); card.id = 'updCard'; card.className = 'upd-card'; document.body.append(card); }
+  const later = u.status === 'available' || u.status === 'ready' ? '<button class="btn sm ghost" data-upd="later">Sonra</button>' : '';
+  card.innerHTML = `<div class="upd-head"><svg width="22" height="22"><use href="#logo"/></svg><b>Glassly güncellemesi</b></div>
+    <p>${updText(u)}</p>${updBar(u)}<div class="upd-acts">${later}${updButtons(u)}</div>`;
+}
+function onUpdate(u) {
+  state.update = u;
+  renderUpdateRow(u);
+  renderUpdateCard(u);
+}
+document.addEventListener('click', async (e) => {
+  const b = e.target.closest('[data-upd]');
+  if (!b) return;
+  const act = b.dataset.upd;
+  if (act === 'later') { state.updDismissed = state.update?.latest; renderUpdateCard(state.update); return; }
+  if (act === 'check') { const u = await G.update.check(); if (u.status === 'latest') toast('Glassly güncel.'); else if (u.status === 'available') state.updDismissed = null; onUpdate(u); return; }
+  if (act === 'download') { state.updDismissed = null; onUpdate(await G.update.download()); return; }
+  if (act === 'cancel') { onUpdate(await G.update.cancel()); return; }
+  if (act === 'install') onUpdate(await G.update.install());
+});
+G.update.onState(onUpdate);
+G.update.status().then(onUpdate).catch(() => {});
 
 const POPULAR = ['anthropic', 'openai', 'google', 'openrouter', 'deepseek', 'groq', 'mistral', 'xai', 'opencode'];
 async function renderProviders() {

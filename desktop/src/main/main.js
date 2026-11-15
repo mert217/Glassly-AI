@@ -10,6 +10,7 @@ const { Assistant } = require('./assistant');
 const { Accounts } = require('./account');
 const files = require('./files');
 const voice = require('./voice');
+const { Updater } = require('./updater');
 const crypto = require('node:crypto');
 
 const isMac = process.platform === 'darwin';
@@ -330,6 +331,14 @@ ipcMain.handle('window:overlay', (_e, { color, symbolColor }) => {
 });
 ipcMain.handle('app:info', () => ({ version: app.getVersion(), platform: process.platform }));
 
+// ---------------------------------------------------------------- güncelleme
+const updater = new Updater({ app, shell, send: (ch, p) => { if (win && !win.isDestroyed()) win.webContents.send(ch, p); } });
+ipcMain.handle('update:status', () => updater.status());
+ipcMain.handle('update:check', () => updater.check());
+ipcMain.handle('update:download', () => updater.download());
+ipcMain.handle('update:cancel', () => updater.cancel());
+ipcMain.handle('update:install', () => updater.install());
+
 // ---------------------------------------------------------------- uygulama
 app.whenReady().then(() => {
   if (!isMac) Menu.setApplicationMenu(null);
@@ -340,6 +349,7 @@ app.whenReady().then(() => {
   createWindow();
   setupTray();
   assistant.start();
+  if (app.isPackaged || process.env.GLASSLY_UPDATE_TEST) updater.start();
   connections.start().catch((e) => console.error('Bağlantı sunucusu', e)).finally(() => engine.start());
   app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
 });

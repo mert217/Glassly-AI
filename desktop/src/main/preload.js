@@ -96,4 +96,12 @@ contextBridge.exposeInMainWorld('glassly', {
   onNativeTheme: on('theme:native'),
   setOverlay: (o) => ipcRenderer.invoke('window:overlay', o),
   appInfo: () => ipcRenderer.invoke('app:info'),
+  update: {
+    status: () => ipcRenderer.invoke('update:status'),
+    check: () => ipcRenderer.invoke('update:check'),
+    download: () => ipcRenderer.invoke('update:download'),
+    cancel: () => ipcRenderer.invoke('update:cancel'),
+    install: () => ipcRenderer.invoke('update:install'),
+    onState: on('update:state'),
+  },
 });

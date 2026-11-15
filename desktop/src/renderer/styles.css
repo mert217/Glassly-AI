@@ -735,3 +735,12 @@ body.auth-open .app { filter: blur(2px); }
 .usage-bar i { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #7c8cff, #c06bff); transition: width .4s ease; }
 .usage-bar.low i { background: linear-gradient(90deg, #ff9a5c, #ff5c7a); }
 #acctUsage .l { flex: 1; }
+
+/* güncelleme */
+.upd-card { position: fixed; right: 18px; bottom: 18px; z-index: 95; width: 320px; padding: 14px 16px; border-radius: 18px; background: var(--glass-strong); border: 1px solid var(--stroke); box-shadow: var(--shadow); backdrop-filter: blur(24px); animation: rise .3s var(--ease); }
+.upd-card .upd-head { display: flex; align-items: center; gap: 8px; font-size: var(--text-sm); }
+.upd-card p { margin: 8px 0 10px; color: var(--text-2); font-size: var(--text-sm); line-height: 1.45; }
+.upd-card .upd-acts { display: flex; justify-content: flex-end; gap: 8px; }
+.upd-prog { height: 6px; border-radius: 999px; background: color-mix(in srgb, var(--text) 10%, transparent); overflow: hidden; margin: 6px 0 10px; }
+.upd-prog i { display: block; height: 100%; background: linear-gradient(90deg, var(--accent-1), var(--accent-2)); transition: width .25s var(--ease); }
+#updRow .row .l { flex: 1; min-width: 0; }

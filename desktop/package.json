@@ -2,7 +2,7 @@
   "name": "glassly",
   "productName": "Glassly",
   "version": "0.1.0",
-  "description": "Cam gibi berrak, açık kaynak AI kod asistanı — opencode motoruyla.",
+  "description": "Glassly yapay zekâ asistanı",
   "main": "src/main/main.js",
   "author": {
     "name": "Glassly",
@@ -28,7 +28,8 @@
     "files": [
       "src/**/*",
       "node_modules/**/*",
-      "package.json"
+      "package.json",
+      "build/icon.png"
     ],
     "extraResources": [
       {
@@ -55,8 +56,10 @@
         "deb"
       ],
       "category": "Development",
-      "icon": "build/icon.png",
-      "maintainer": "Glassly <destek@glassly.biz>"
+      "icon": "build/icons",
+      "maintainer": "Glassly <destek@glassly.biz>",
+      "synopsis": "Glassly yapay zekâ asistanı",
+      "syncDesktopName": true
     },
     "nsis": {
       "oneClick": false,
@@ -88,5 +91,6 @@
     "electron": "^45.3.2",
     "electron-builder": "^26.18.0"
   },
-  "homepage": "https://glassly.biz"
+  "homepage": "https://glassly.biz",
+  "desktopName": "glassly.desktop"
 }

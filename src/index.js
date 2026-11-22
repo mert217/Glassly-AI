@@ -7,6 +7,7 @@ import { CORS, setupPool, publicModels, limited, ensureDiscovery, openUpstream }
 import { openDB } from './db.js';
 import { createAccounts } from './auth.js';
 import { mayNeedTools, plan, webSearch, searchContext, generateImage, openVision, transcribe, localToEpoch } from './tools.js';
+import { completeReliably } from './stream.js';
 
 const log = (...a) => console.log(...a);
 const json = (status, obj, extra = {}) => new Response(JSON.stringify(obj), { status, headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store', ...CORS, ...extra } });
@@ -41,24 +42,6 @@ const DOWNLOADS = [
 
 const streaming = new Set(); // aynı anda kullanıcı başına tek yanıt
 const title = (t) => { const s = String(t).replace(/\s+/g, ' ').trim(); return s.length > 48 ? s.slice(0, 46) + '…' : s || 'Yeni sohbet'; };
-
-// OpenAI SSE akışından metin parçalarını çıkarır
-async function* deltas(body) {
-  const reader = body.getReader(); const dec = new TextDecoder(); let buf = '';
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buf += dec.decode(value, { stream: true });
-    let i;
-    while ((i = buf.indexOf('\n')) >= 0) {
-      const line = buf.slice(0, i).trim(); buf = buf.slice(i + 1);
-      if (!line.startsWith('data:')) continue;
-      const d = line.slice(5).trim();
-      if (d === '[DONE]') return;
-      try { const j = JSON.parse(d); const t = j.choices?.[0]?.delta?.content ?? j.choices?.[0]?.message?.content; if (t) yield t; } catch { /* parça */ }
-    }
-  }
-}
 
 const parseMeta = (m) => { if (!m) return {}; try { return JSON.parse(m) || {}; } catch { return {}; } };
 // İstemciye giden ek bilgiler (belge metinleri gönderilmez)
@@ -264,6 +247,7 @@ async function webApi(request, p, ctx, { db, acc, S, env }) {
     streaming.add(me.id);
     const work = (async () => {
       let out = ''; const ameta = {}; const notes = [];
+      const heartbeat = setInterval(() => { send({ type: 'ping' }); }, 15000);
       try {
         await send({ type: 'chat', id: chat.id, title: chat.title });
         if (!liveImages.length && mayNeedTools(lastUser)) {
@@ -316,20 +300,28 @@ async function webApi(request, p, ctx, { db, acc, S, env }) {
             // Görsel modeli yoksa: belgeler ve yazı yine cevaplanır, görsel görülemediği söylenir
             log('görsel yedek', e.message);
             const note = '\n\nKullanıcının eklediği görseli şu an göremiyorsun; görselle ilgili kısım için bunu kısaca söyle ve birazdan tekrar denemesini öner.';
-            r = await openUpstream(S, { model: 'auto', stream: true, messages: [{ role: 'system', content: sys + note }, ...ctxMsgs] }, request.signal);
+            r = await openUpstream(S, { model: 'auto', stream: true, max_tokens: 4096, messages: [{ role: 'system', content: sys + note }, ...ctxMsgs] }, request.signal);
           }
           await send({ type: 'status', text: '' });
         } else {
-          r = await openUpstream(S, { model: 'auto', stream: true, messages: [{ role: 'system', content: sys }, ...ctxMsgs] }, request.signal);
+          r = await openUpstream(S, { model: 'auto', stream: true, max_tokens: 4096, messages: [{ role: 'system', content: sys }, ...ctxMsgs] }, request.signal);
         }
         if (!r.body) throw new Error('boş yanıt');
-        for await (const t of deltas(r.body)) { out += t; await send({ type: 'delta', text: t }); if (request.signal?.aborted) break; }
+        await completeReliably({
+          response: r, signal: request.signal,
+          messages: [{ role: 'system', content: sys }, ...ctxMsgs],
+          open: (messages) => openUpstream(S, { model: 'auto', stream: true, max_tokens: 4096, messages }, request.signal),
+          onText: async (t) => { out += t; await send({ type: 'delta', text: t }); },
+          onRetry: () => send({ type: 'status', text: 'Yanıt tamamlanıyor…' }),
+        });
         if (!out.trim() && !ameta.images) throw new Error('boş yanıt');
       } catch (e) {
         log('sohbet hatası', e.message);
         if (ameta.images && !out.trim()) out = 'İşte istediğin görsel.';
+        if (out.trim() && !request.signal?.aborted) await send({ type: 'error', message: 'Yanıt tamamlanamadı. “Devam et” yazarak sürdürebilirsin.' });
         if (!out.trim()) { await acc.refund(me).catch(() => {}); await send({ type: 'error', message: request.signal?.aborted ? 'Durduruldu.' : 'Şu an yanıt veremiyorum, birazdan tekrar dene.' }); }
       } finally {
+        clearInterval(heartbeat);
         streaming.delete(me.id);
         if (ameta.images && !out.trim()) out = 'İşte istediğin görsel.';
         if (out.trim()) {

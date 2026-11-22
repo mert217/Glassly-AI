@@ -147,7 +147,7 @@ function aiStreamToOpenAI(stream, model) {
   }));
 }
 export async function runWorkersAI(S, slot, body) {
-  const input = { messages: body.messages || [], stream: !!body.stream };
+  const input = { messages: body.messages || [], stream: !!body.stream, max_tokens: 4096 };
   for (const k of ['max_tokens', 'temperature', 'top_p']) if (body[k] != null) input[k] = body[k];
   const out = await S.ai.run(slot.model, input);
   const headers = { 'x-glassly-upstream': `${slot.upstream}/${slot.model}`, ...CORS };
@@ -168,6 +168,7 @@ function killSlot(slot, hours = 6) { slot.fails = 4; slot.coolUntil = Date.now()
 
 // Havuzdan çalışan ilk yuvanın yanıtını döndürür (OpenAI biçiminde); hiçbiri olmazsa hata fırlatır
 export async function openUpstream(S, body, signal, route = '/chat/completions') {
+  body = { max_tokens: 4096, ...body };
   const request = { signal: signal || new AbortController().signal };
   const list = candidates(S, body.model);
   if (!list.length) throw Object.assign(new Error('Tüm modeller şu an soğumada, biraz sonra tekrar dene.'), { status: 503 });
@@ -218,4 +219,3 @@ export async function openUpstream(S, body, signal, route = '/chat/completions')
   }
   throw Object.assign(new Error('Şu an uygun model yok, birazdan tekrar dene. Son hata: ' + lastErr), { status: 503 });
 }
-

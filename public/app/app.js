@@ -385,7 +385,7 @@ async function stream(body, userMsg) {
   $('#msgs').append(el); toBottom();
   const box = el.querySelector('.md'); const stat = el.querySelector('.status');
   const meta = {};
-  let out = ''; let raf = 0; let errMsg = '';
+  let out = ''; let raf = 0; let errMsg = ''; let receivedDone = false;
   const paint = () => {
     raf = 0; const stick = nearBottom();
     box.replaceChildren(md(out));
@@ -420,9 +420,10 @@ async function stream(body, userMsg) {
         else if (ev.type === 'image') { meta.images = [ev.id]; el.querySelector('.xtra').replaceChildren(extrasEl(meta)); toBottom(); }
         else if (ev.type === 'reminder') { meta.reminder = ev.item; el.querySelector('.xtra').replaceChildren(extrasEl(meta)); onReminder(ev.item); }
         else if (ev.type === 'error') errMsg = ev.message;
-        else if (ev.type === 'done' && ev.usage) { state.usage = ev.usage; fillUsage(); }
+        else if (ev.type === 'done') { receivedDone = true; if (ev.usage) { state.usage = ev.usage; fillUsage(); } }
       }
     }
+    if (!receivedDone && !ac.signal.aborted) errMsg ||= 'Bağlantı kesildi. “Devam et” yazarak yanıtı sürdürebilirsin.';
   } catch (e) {
     if (e.name !== 'AbortError') errMsg = e.message;
   } finally {
@@ -435,6 +436,7 @@ async function stream(body, userMsg) {
     if (c) { c.updated = Date.now(); state.chats = [c, ...state.chats.filter((x) => x !== c)]; renderChats(); }
     const stick = nearBottom();
     renderMessages(); syncSend();
+    if (errMsg && out.trim()) toast(errMsg, 'err');
     if (stick) toBottom();
     state.voiceTurn = false;
     if (ac.signal.aborted) api('GET', '/auth/usage').then((q) => { state.usage = q; fillUsage(); }).catch(() => {});

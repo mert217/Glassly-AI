@@ -3,6 +3,7 @@ const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const KEY = 'glassly.token';
+const learnCode = new URLSearchParams(location.search).get('learn') || '';
 
 const state = { token: '', user: null, usage: null, config: {}, chats: [], chatId: null, messages: [], busy: false, abort: null, mode: 'login', files: [], reminders: [] };
 
@@ -132,7 +133,7 @@ function signedOut() {
   state.abort?.abort();
   try { window.google?.accounts.id.disableAutoSelect(); } catch {}
   $('#settings').hidden = true; $('#app').hidden = true; $('#auth').hidden = false;
-  history.replaceState(null, '', '/app/');
+  history.replaceState(null, '', /^[A-F0-9]{12}$/.test(learnCode) ? `/app/?learn=${learnCode}` : '/app/');
   setMode('login');
   if ($('#gWrap').hidden) initGoogle();
 }
@@ -158,7 +159,11 @@ async function showApp() {
   $('#auth').hidden = true; $('#app').hidden = false;
   fillUser();
   renderEmpty();
-  try { const j = await api('GET', '/auth/me'); state.user = j.user; state.usage = j.usage; fillUser(); renderEmpty(); }
+  try {
+    const j = await api('GET', '/auth/me'); state.user = j.user; state.usage = j.usage;
+    if (/^[A-F0-9]{12}$/.test(learnCode)) { location.replace('/app/learn/#' + learnCode); return; }
+    fillUser(); renderEmpty();
+  }
   catch (e) { if (e.status === 401) return signedOut(); }
   await loadChats();
   loadReminders();

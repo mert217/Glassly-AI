@@ -30,6 +30,12 @@ const SCHEMA = [
   `CREATE TABLE IF NOT EXISTS api_usage (
     uid TEXT PRIMARY KEY, day TEXT NOT NULL, n INTEGER NOT NULL DEFAULT 0,
     minute INTEGER NOT NULL DEFAULT 0, mn INTEGER NOT NULL DEFAULT 0)`,
+  `CREATE TABLE IF NOT EXISTS learn_links (
+    code TEXT PRIMARY KEY, proof TEXT NOT NULL, expires INTEGER NOT NULL,
+    uid TEXT REFERENCES users(id) ON DELETE CASCADE, parent TEXT, token TEXT UNIQUE,
+    token_exp INTEGER)`,
+  `CREATE INDEX IF NOT EXISTS learn_links_expires ON learn_links(expires)`,
+  `CREATE INDEX IF NOT EXISTS learn_links_owner ON learn_links(uid)`,
 ];
 // Sonradan eklenen sütunlar (varsa hata verir, yok sayılır)
 const COLUMNS = [

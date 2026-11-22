@@ -9,6 +9,7 @@ import { createAccounts } from './auth.js';
 import { mayNeedTools, plan, webSearch, searchContext, generateImage, openVision, transcribe, localToEpoch } from './tools.js';
 import { completeReliably } from './stream.js';
 import { hasApiKey, externalApi, manageKeys } from './apikeys.js';
+import { learn } from './learn.js';
 
 const log = (...a) => console.log(...a);
 const json = (status, obj, extra = {}) => new Response(JSON.stringify(obj), { status, headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store', ...CORS, ...extra } });
@@ -355,6 +356,13 @@ async function handle(request, env, ctx) {
     await ensureDiscovery(S);
     const now = Date.now();
     return json(200, { ok: true, runtime: 'cloudflare', ready: S.slots.filter((s) => s.coolUntil <= now).length, total: S.slots.length });
+  }
+  if (p.startsWith('/auth/learn/')) return learn(request, p.slice('/auth/learn/'.length), {
+    db, acc, ...helpers, blocked: k => limited(S, `learn:${k}:${ip}`),
+    open: async body => { await ensureDiscovery(S); return openUpstream(S, body, request.signal); },
+  });
+  if (/^Bearer\s+gly_learn_/i.test(request.headers.get('authorization') || '')) {
+    return fail(401, 'Bu token yalnızca İngilizce pratiği için kullanılabilir.', 'auth');
   }
   if (/^\/(v1\/)?auth\/api-keys(\/|$)/.test(p)) return manageKeys(request, p.replace(/^\/(v1\/)?auth/, ''), { db, acc, ...helpers });
   if (/^\/(v1\/)?auth\//.test(p)) return acc.auth(request, p, ip, helpers);

@@ -116,6 +116,7 @@
       <button role="tab" data-tab="account">Hesap</button>
       <button role="tab" data-tab="look">Görünüm ve ses</button>
       <button role="tab" data-tab="rem">Hatırlatıcılar</button>
+      <button role="tab" data-tab="api">API</button>
       <button role="tab" data-tab="dev" id="tabDev" hidden>Geliştirici</button>
     </div>
     <div class="panes">
@@ -170,6 +171,24 @@
         <h4>Hesaplar <span class="muted" id="devCount"></span></h4>
         <input class="field" id="devSearch" placeholder="Ad ya da e-posta ara" />
         <div class="users" id="devUsers"></div>
+      </section>
+      <section data-pane="api">
+        <h4>Glassly API anahtarın</h4>
+        <p class="muted">Glassly'yi kendi uygulamanda kullan. Herkes hesabıyla bir etkin anahtar oluşturabilir. Hesap başına günlük toplam 10, dakikada 2 istek; yanıt başına en fazla 512 token. Bu kota normal sohbetten ayrıdır. Başarısız denemeler de sayılır; anahtarı değiştirmek kotayı yenilemez. Günlük hak Türkiye saatiyle gece yarısı yenilenir.</p>
+        <div class="row"><input class="field" id="apiKeyName" placeholder="Kime verilecek? Örn. Ahmet'in uygulaması" maxlength="60" /><button class="btn sm" id="apiKeyCreate">Anahtar oluştur</button></div>
+        <div id="apiKeySecret" hidden>
+          <p>Anahtarı şimdi kopyala. Tamamı bir daha gösterilmez; yalnızca güvendiğin kişiye ver.</p>
+          <input class="field" id="apiKeyValue" readonly aria-label="Yeni API anahtarı" />
+          <div class="row"><button class="btn sm" id="apiKeyCopy">Kopyala</button><button class="btn sm ghost" id="apiKeyHide">Gizle</button></div>
+        </div>
+        <div class="users" id="apiKeys"></div>
+        <details><summary>API nasıl kullanılır?</summary>
+          <p class="muted">OpenAI uyumlu. Base URL: <code>https://glassly.biz/v1</code>, model: <code>glassly</code>. Anahtarı tarayıcı kodunda veya herkese açık depoda paylaşma; sunucuda sakla.</p>
+          <pre style="overflow:auto;max-width:100%;white-space:pre-wrap"><code>curl https://glassly.biz/v1/chat/completions \
+  -H "Authorization: Bearer ANAHTARIN" \
+  -H "Content-Type: application/json" \
+  -d '{"model":"glassly","messages":[{"role":"user","content":"Merhaba"}],"max_tokens":512}'</code></pre>
+        </details>
       </section>
     </div>
   </div>

@@ -128,6 +128,8 @@ export function createAccounts(db, env) {
 
   async function deleteUser(id) {
     await db.batch([
+      ['DELETE FROM api_keys WHERE uid = ?', id],
+      ['DELETE FROM api_usage WHERE uid = ?', id],
       ['DELETE FROM images WHERE uid = ?', id],
       ['DELETE FROM reminders WHERE uid = ?', id],
       ['DELETE FROM extra WHERE uid = ?', id],

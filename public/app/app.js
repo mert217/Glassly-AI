@@ -126,6 +126,8 @@ function signedIn(j, remember) {
   showApp();
 }
 function signedOut() {
+  hideApiSecret();
+  $('#apiKeys').replaceChildren();
   dropToken(); Object.assign(state, { token: '', user: null, chats: [], chatId: null, messages: [] });
   state.abort?.abort();
   try { window.google?.accounts.id.disableAutoSelect(); } catch {}
@@ -461,16 +463,18 @@ function openSettings(tab) {
   showTab(tab === 'dev' && state.user.role !== 'gelistirici' ? 'account' : tab);
 }
 function showTab(t) {
+  if (t !== 'api') hideApiSecret();
   $$('.tabs [data-tab]').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.tab === t)));
   $$('.panes [data-pane]').forEach((p) => p.classList.toggle('on', p.dataset.pane === t));
   if (t === 'dev') loadDev();
+  if (t === 'api') loadApiKeys();
   if (t === 'rem') { drawReminders(); loadReminders(); const d = new Date(Date.now() + 3600e3); d.setMinutes(0, 0, 0); if (!$('#remAt').value) $('#remAt').value = new Date(d - d.getTimezoneOffset() * 60e3).toISOString().slice(0, 16); }
   if (t === 'look') $('#voiceMode').checked = voiceMode();
 }
 $$('[data-open-settings]').forEach((b) => b.addEventListener('click', () => openSettings(b.dataset.openSettings)));
 $$('.tabs [data-tab]').forEach((b) => b.addEventListener('click', () => showTab(b.dataset.tab)));
-$('#settings').addEventListener('click', (e) => { if (e.target.id === 'settings' || e.target.closest('[data-close]')) $('#settings').hidden = true; });
-document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { $('#settings').hidden = true; $('#meMenu').hidden = true; closeDrawer(); } });
+$('#settings').addEventListener('click', (e) => { if (e.target.id === 'settings' || e.target.closest('[data-close]')) { $('#settings').hidden = true; hideApiSecret(); } });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { $('#settings').hidden = true; hideApiSecret(); $('#meMenu').hidden = true; closeDrawer(); } });
 
 $('#saveName').addEventListener('click', async () => {
   try { const j = await api('PATCH', '/auth/me', { name: $('#sName').value }); state.user = j.user; fillUser(); renderEmpty(); toast('Adın güncellendi'); }
@@ -726,6 +730,40 @@ async function loadDev() {
     devUsers = u.users; drawUsers();
   } catch (e) { toast(e.message, 'err'); }
 }
+async function loadApiKeys() {
+  try {
+    const j = await api('GET', '/auth/api-keys');
+    $('#apiKeys').innerHTML = j.keys.length ? j.keys.map(k => `<div class="u"><div style="min-width:0;flex:1"><b>${esc(k.name)}</b><small class="muted" style="display:block;overflow-wrap:anywhere">${esc(k.prefix)}… · ${k.used}/10 bugün · ${k.revoked ? 'İptal edildi' : 'Etkin'}</small></div>${k.revoked ? '' : `<button class="btn sm ghost" data-revoke-key="${esc(k.id)}">İptal et</button>`}</div>`).join('') : '<p class="muted">Henüz API anahtarı yok.</p>';
+  } catch (e) { toast(e.message, 'err'); }
+}
+$('#apiKeyCreate').addEventListener('click', async () => {
+  const name = $('#apiKeyName').value.trim();
+  if (!name) return toast('Anahtar için bir ad yaz.', 'err');
+  const b = $('#apiKeyCreate'); b.disabled = true;
+  try {
+    const j = await api('POST', '/auth/api-keys', { name });
+    $('#apiKeyValue').value = j.key; $('#apiKeySecret').hidden = false; $('#apiKeyName').value = '';
+    loadApiKeys();
+  } catch (e) { toast(e.message, 'err'); }
+  finally { b.disabled = false; }
+});
+$('#apiKeyCopy').addEventListener('click', async () => {
+  try { await navigator.clipboard.writeText($('#apiKeyValue').value); toast('Anahtar kopyalandı'); }
+  catch { $('#apiKeyValue').select(); toast('Anahtarı seçip elle kopyalayabilirsin.', 'err'); }
+});
+function hideApiSecret() { $('#apiKeyValue').value = ''; $('#apiKeySecret').hidden = true; }
+$('#apiKeyHide').addEventListener('click', hideApiSecret);
+$('#apiKeys').addEventListener('click', async e => {
+  const b = e.target.closest('[data-revoke-key]');
+  if (!b) return;
+  if (b.dataset.confirm !== 'yes') {
+    b.dataset.confirm = 'yes'; b.textContent = 'Eminsen tekrar bas';
+    setTimeout(() => { if (b.isConnected) { delete b.dataset.confirm; b.textContent = 'İptal et'; } }, 5000);
+    return;
+  }
+  try { await api('DELETE', '/auth/api-keys/' + b.dataset.revokeKey); hideApiSecret(); loadApiKeys(); toast('API anahtarı iptal edildi'); }
+  catch (err) { toast(err.message, 'err'); }
+});
 function drawUsers() {
   const q = $('#devSearch').value.trim().toLocaleLowerCase('tr');
   const list = devUsers.filter((u) => !q || (u.name + ' ' + u.email).toLocaleLowerCase('tr').includes(q));

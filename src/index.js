@@ -8,6 +8,7 @@ import { openDB } from './db.js';
 import { createAccounts } from './auth.js';
 import { mayNeedTools, plan, webSearch, searchContext, generateImage, openVision, transcribe, localToEpoch } from './tools.js';
 import { completeReliably } from './stream.js';
+import { hasApiKey, externalApi, manageKeys } from './apikeys.js';
 
 const log = (...a) => console.log(...a);
 const json = (status, obj, extra = {}) => new Response(JSON.stringify(obj), { status, headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store', ...CORS, ...extra } });
@@ -355,10 +356,17 @@ async function handle(request, env, ctx) {
     const now = Date.now();
     return json(200, { ok: true, runtime: 'cloudflare', ready: S.slots.filter((s) => s.coolUntil <= now).length, total: S.slots.length });
   }
+  if (/^\/(v1\/)?auth\/api-keys(\/|$)/.test(p)) return manageKeys(request, p.replace(/^\/(v1\/)?auth/, ''), { db, acc, ...helpers });
   if (/^\/(v1\/)?auth\//.test(p)) return acc.auth(request, p, ip, helpers);
   if (/^\/(v1\/)?admin\//.test(p)) { await ensureDiscovery(S); return acc.admin(request, p, helpers, S); }
   if (p.startsWith('/api/')) { await ensureDiscovery(S); return webApi(request, p, ctx, { db, acc, S, env }); }
 
+  if ((p === '/v1' || p.startsWith('/v1/')) && hasApiKey(request)) {
+    return externalApi(request, p, { db, acc, ...helpers, open: async body => {
+      await ensureDiscovery(S);
+      return openUpstream(S, body, request.signal);
+    } });
+  }
   // ---- Masaüstü uygulamasının bağlandığı OpenAI uyumlu uç
   if (p === '/v1/models' || p === '/v1') {
     await ensureDiscovery(S);

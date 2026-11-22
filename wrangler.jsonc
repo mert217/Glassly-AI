@@ -24,7 +24,7 @@
     "GLASSLY_ADMINS": "ahmetmertevci@gmail.com",
     "GLASSLY_IMAGE_LIMIT": "15",
     "GLASSLY_TIMEZONE": "Europe/Istanbul",
-    "GLASSLY_GOOGLE_CLIENT_IDS": "95721514458-rjd8iqovm05gejniu25gokc5k9hm5pud.apps.googleusercontent.com",
-    "GLASSLY_GOOGLE_WEB_CLIENT_ID": ""
+    "GLASSLY_GOOGLE_CLIENT_IDS": "95721514458-rjd8iqovm05gejniu25gokc5k9hm5pud.apps.googleusercontent.com,95721514458-ggmgiboe1b9c8ksmhr99idgv9jgvaoab.apps.googleusercontent.com",
+    "GLASSLY_GOOGLE_WEB_CLIENT_ID": "95721514458-ggmgiboe1b9c8ksmhr99idgv9jgvaoab.apps.googleusercontent.com"
   }
 }
